@@ -75,6 +75,7 @@ typedef struct {
 	cache_entry_t cache[MAX_CACHE_ENTRIES];
 	int cache_size;
 	int cache_clock;  // For LRU
+	pthread_mutex_t cache_mutex;
 } tts_state_t;
 
 static tts_state_t tts_state;
@@ -450,36 +451,54 @@ TTS_LoadFromCache
 qboolean TTS_LoadFromCache( const char *text, const tts_voice_params_t *params, tts_audio_buffer_t **out_audio ) {
 	unsigned int hash = TTS_HashText( text, params );
 	int i;
+	qboolean found = qfalse;
 	
 	if ( !tts_state.initialized || !g_tts_enable.integer ) {
 		return qfalse;
 	}
 	
+	pthread_mutex_lock( &tts_state.cache_mutex );
+	
 	for ( i = 0; i < tts_state.cache_size; i++ ) {
-		if ( tts_state.cache[i].hash == hash ) {
+		if ( tts_state.cache[i].hash == hash && tts_state.cache[i].audio != NULL ) {
 			// Cache hit - copy audio buffer
 			tts_audio_buffer_t *cached = tts_state.cache[i].audio;
 			tts_audio_buffer_t *audio = (tts_audio_buffer_t*)malloc( sizeof( tts_audio_buffer_t ) );
+			
+			if ( !audio ) {
+				pthread_mutex_unlock( &tts_state.cache_mutex );
+				return qfalse;
+			}
 			
 			audio->sample_rate = cached->sample_rate;
 			audio->channels = cached->channels;
 			audio->bits_per_sample = cached->bits_per_sample;
 			audio->size = cached->size;
 			audio->data = (byte*)malloc( audio->size );
+			
+			if ( !audio->data ) {
+				free( audio );
+				pthread_mutex_unlock( &tts_state.cache_mutex );
+				return qfalse;
+			}
+			
 			memcpy( audio->data, cached->data, audio->size );
 			
 			tts_state.cache[i].last_used = tts_state.cache_clock++;
 			*out_audio = audio;
+			found = qtrue;
 			
 			if ( g_tts_debug.integer ) {
 				G_Printf( "^2[TTS] Cache hit for text hash 0x%08x\n", hash );
 			}
 			
-			return qtrue;
+			break;
 		}
 	}
 	
-	return qfalse;
+	pthread_mutex_unlock( &tts_state.cache_mutex );
+	
+	return found;
 }
 
 /*
@@ -490,26 +509,32 @@ TTS_SaveToCache
 void TTS_SaveToCache( const char *text, const tts_voice_params_t *params, const tts_audio_buffer_t *audio ) {
 	unsigned int hash = TTS_HashText( text, params );
 	int i, oldest_idx = 0;
-	int oldest_time = tts_state.cache[0].last_used;
+	int oldest_time;
 	
-	if ( !tts_state.initialized || !g_tts_enable.integer ) {
+	if ( !tts_state.initialized || !g_tts_enable.integer || !audio || !audio->data ) {
 		return;
 	}
+	
+	pthread_mutex_lock( &tts_state.cache_mutex );
 	
 	// Check if already cached
 	for ( i = 0; i < tts_state.cache_size; i++ ) {
 		if ( tts_state.cache[i].hash == hash ) {
 			// Update existing entry
 			tts_state.cache[i].last_used = tts_state.cache_clock++;
+			pthread_mutex_unlock( &tts_state.cache_mutex );
 			return;
 		}
 	}
 	
-	// Find oldest entry for eviction
-	for ( i = 0; i < tts_state.cache_size; i++ ) {
-		if ( tts_state.cache[i].last_used < oldest_time ) {
-			oldest_time = tts_state.cache[i].last_used;
-			oldest_idx = i;
+	// Find oldest entry for eviction (only if cache has entries)
+	if ( tts_state.cache_size > 0 ) {
+		oldest_time = tts_state.cache[0].last_used;
+		for ( i = 1; i < tts_state.cache_size; i++ ) {
+			if ( tts_state.cache[i].last_used < oldest_time ) {
+				oldest_time = tts_state.cache[i].last_used;
+				oldest_idx = i;
+			}
 		}
 	}
 	
@@ -517,36 +542,51 @@ void TTS_SaveToCache( const char *text, const tts_voice_params_t *params, const 
 	if ( tts_state.cache_size >= MAX_CACHE_ENTRIES ) {
 		if ( tts_state.cache[oldest_idx].audio ) {
 			TTS_FreeAudioBuffer( tts_state.cache[oldest_idx].audio );
+			tts_state.cache[oldest_idx].audio = NULL;
 		}
 		tts_state.cache[oldest_idx].hash = hash;
 		tts_state.cache[oldest_idx].last_used = tts_state.cache_clock++;
 		
 		// Copy audio buffer
 		tts_audio_buffer_t *cached = (tts_audio_buffer_t*)malloc( sizeof( tts_audio_buffer_t ) );
-		cached->sample_rate = audio->sample_rate;
-		cached->channels = audio->channels;
-		cached->bits_per_sample = audio->bits_per_sample;
-		cached->size = audio->size;
-		cached->data = (byte*)malloc( cached->size );
-		memcpy( cached->data, audio->data, cached->size );
-		
-		tts_state.cache[oldest_idx].audio = cached;
+		if ( cached ) {
+			cached->sample_rate = audio->sample_rate;
+			cached->channels = audio->channels;
+			cached->bits_per_sample = audio->bits_per_sample;
+			cached->size = audio->size;
+			cached->data = (byte*)malloc( cached->size );
+			
+			if ( cached->data ) {
+				memcpy( cached->data, audio->data, cached->size );
+				tts_state.cache[oldest_idx].audio = cached;
+			} else {
+				free( cached );
+			}
+		}
 	} else {
 		// Add new entry
 		tts_state.cache[tts_state.cache_size].hash = hash;
 		tts_state.cache[tts_state.cache_size].last_used = tts_state.cache_clock++;
 		
 		tts_audio_buffer_t *cached = (tts_audio_buffer_t*)malloc( sizeof( tts_audio_buffer_t ) );
-		cached->sample_rate = audio->sample_rate;
-		cached->channels = audio->channels;
-		cached->bits_per_sample = audio->bits_per_sample;
-		cached->size = audio->size;
-		cached->data = (byte*)malloc( cached->size );
-		memcpy( cached->data, audio->data, cached->size );
-		
-		tts_state.cache[tts_state.cache_size].audio = cached;
-		tts_state.cache_size++;
+		if ( cached ) {
+			cached->sample_rate = audio->sample_rate;
+			cached->channels = audio->channels;
+			cached->bits_per_sample = audio->bits_per_sample;
+			cached->size = audio->size;
+			cached->data = (byte*)malloc( cached->size );
+			
+			if ( cached->data ) {
+				memcpy( cached->data, audio->data, cached->size );
+				tts_state.cache[tts_state.cache_size].audio = cached;
+				tts_state.cache_size++;
+			} else {
+				free( cached );
+			}
+		}
 	}
+	
+	pthread_mutex_unlock( &tts_state.cache_mutex );
 	
 	if ( g_tts_debug.integer ) {
 		G_Printf( "^2[TTS] Cached audio for text hash 0x%08x\n", hash );
@@ -716,10 +756,18 @@ qboolean TTS_Init( void ) {
 		return qfalse;
 	}
 	
+	if ( pthread_mutex_init( &tts_state.cache_mutex, NULL ) != 0 ) {
+		G_Printf( "^1[TTS] Failed to initialize cache mutex\n" );
+		pthread_mutex_destroy( &tts_state.queue_mutex );
+		pthread_mutex_destroy( &tts_state.completed_mutex );
+		return qfalse;
+	}
+	
 	if ( pthread_cond_init( &tts_state.queue_condition, NULL ) != 0 ) {
 		G_Printf( "^1[TTS] Failed to initialize condition variable\n" );
 		pthread_mutex_destroy( &tts_state.queue_mutex );
 		pthread_mutex_destroy( &tts_state.completed_mutex );
+		pthread_mutex_destroy( &tts_state.cache_mutex );
 		return qfalse;
 	}
 	
@@ -729,6 +777,7 @@ qboolean TTS_Init( void ) {
 		G_Printf( "^1[TTS] Failed to create worker thread\n" );
 		pthread_mutex_destroy( &tts_state.queue_mutex );
 		pthread_mutex_destroy( &tts_state.completed_mutex );
+		pthread_mutex_destroy( &tts_state.cache_mutex );
 		pthread_cond_destroy( &tts_state.queue_condition );
 		return qfalse;
 	}
@@ -768,14 +817,18 @@ void TTS_Shutdown( void ) {
 	// Cleanup mutexes
 	pthread_mutex_destroy( &tts_state.queue_mutex );
 	pthread_mutex_destroy( &tts_state.completed_mutex );
+	pthread_mutex_destroy( &tts_state.cache_mutex );
 	pthread_cond_destroy( &tts_state.queue_condition );
 	
 	// Free cache
+	pthread_mutex_lock( &tts_state.cache_mutex );
 	for ( i = 0; i < tts_state.cache_size; i++ ) {
 		if ( tts_state.cache[i].audio ) {
 			TTS_FreeAudioBuffer( tts_state.cache[i].audio );
+			tts_state.cache[i].audio = NULL;
 		}
 	}
+	pthread_mutex_unlock( &tts_state.cache_mutex );
 	
 	memset( &tts_state, 0, sizeof( tts_state_t ) );
 	

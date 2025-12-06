@@ -36,6 +36,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "tr_public.h"
 #include "qgl.h"
 #include "iqm.h"
+#include "tr_glsl.h"
 
 #define GLE(ret, name, ...) extern name##proc * qgl##name;
 QGL_1_1_PROCS;
@@ -1270,6 +1271,18 @@ typedef struct {
 	// RF, temp var used while parsing shader only
 	int allowCompress;
 
+	// Modern rendering features
+	qboolean glslAvailable;
+	qboolean hdrAvailable;
+	glslProgram_t *worldShader;
+	glslProgram_t *pbrShader;
+	glslProgram_t *postProcessShader;
+	glslProgram_t *shadowMapShader;
+	glslProgram_t *ssaoShader;
+	glslProgram_t *tonemapShader;
+	hdrFramebuffer_t hdrFramebuffer;
+	glslProgram_t *currentGLSLProgram;
+
 } trGlobals_t;
 
 extern backEndState_t backEnd;
@@ -1407,6 +1420,25 @@ extern cvar_t  *r_shownormals;                  // draws wireframe normals
 extern cvar_t  *r_clear;                        // force screen clear every frame
 
 extern cvar_t  *r_shadows;                      // controls shadows: 0 = none, 1 = blur, 2 = stencil, 3 = black planar projection
+extern cvar_t  *r_glsl;                         // enable GLSL shaders
+extern cvar_t  *r_hdr;                          // enable HDR rendering
+extern cvar_t  *r_hdrExposure;                  // HDR exposure adjustment
+extern cvar_t  *r_hdrGamma;                     // HDR gamma correction
+extern cvar_t  *r_tonemap;                      // enable tone mapping
+extern cvar_t  *r_ssao;                         // enable SSAO
+extern cvar_t  *r_ssaoRadius;                   // SSAO sample radius
+extern cvar_t  *r_ssaoBias;                     // SSAO depth bias
+extern cvar_t  *r_ssaoIntensity;                // SSAO intensity
+extern cvar_t  *r_pbr;                          // enable PBR rendering
+extern cvar_t  *r_normalMapping;                // enable normal mapping
+extern cvar_t  *r_specularMapping;              // enable specular mapping
+extern cvar_t  *r_shadowMapSize;                // shadow map resolution
+extern cvar_t  *r_shadowCascades;               // number of shadow cascades
+extern cvar_t  *r_shadowBias;                   // shadow map bias
+extern cvar_t  *r_shadowSoftness;               // shadow softness factor
+
+// SSAO texture handle
+extern GLuint ssaoTexture;
 extern cvar_t  *r_flares;                       // light flares
 
 extern cvar_t  *r_portalsky;    // (SA) added
@@ -1618,6 +1650,7 @@ void	GLimp_EndFrame( void );
 
 void	GLimp_LogComment( char *comment );
 void	GLimp_Minimize(void);
+qboolean GLimp_LoadGLSLProcs( void );
 
 void	GLimp_SetGamma( unsigned char red[256],
 					 unsigned char green[256],
@@ -2149,3 +2182,4 @@ void *R_Hunk_Begin( void );
 void R_Hunk_End( void );
 
 #endif //TR_LOCAL_H (THIS MUST BE LAST!!)
+void R_BlitHDRToScreen( void );

@@ -423,6 +423,12 @@ void RB_BeginDrawingView( void ) {
 	backEnd.projection2D = qfalse;
 
 	//
+	// Bind HDR framebuffer if enabled
+	if ( tr.hdrAvailable && r_hdr->integer ) {
+		R_BindHDRFramebuffer();
+	}
+
+	//
 	// set the modelview matrix for the viewer
 	//
 	SetViewportAndScissor();
@@ -1642,6 +1648,31 @@ const void  *RB_SwapBuffers( const void *data ) {
 
 	if ( !glState.finishCalled ) {
 		qglFinish();
+	}
+
+	// Only apply post-processing if we rendered 3D content (not during cinematics/menus)
+#ifdef USE_BLOOM
+	if ( backEnd.doneSurfaces ) {
+#else
+	if ( backEnd.projection2D == qfalse ) {
+#endif
+		// Render SSAO if enabled (before tone mapping)
+		if ( r_ssao->integer && tr.hdrAvailable && tr.ssaoShader && tr.ssaoShader->compiled ) {
+			// ri.Printf( PRINT_ALL, "Rendering SSAO...\n" );
+			R_RenderSSAO();
+		}
+		
+		// Apply HDR tone mapping if enabled
+		if ( tr.hdrAvailable && r_hdr->integer && r_tonemap->integer && tr.tonemapShader && tr.tonemapShader->compiled ) {
+			// ri.Printf( PRINT_ALL, "Applying Tonemap...\n" );
+			R_ApplyToneMapping();
+	} else if ( tr.hdrAvailable && r_hdr->integer ) {
+		// If HDR is enabled but tone mapping is off, blit to screen
+		R_BlitHDRToScreen();
+	}
+	} else if ( tr.hdrAvailable && r_hdr->integer ) {
+		// Unbind HDR framebuffer even if we didn't render 3D content
+		R_UnbindHDRFramebuffer();
 	}
 
 	GLimp_LogComment( "***************** RB_SwapBuffers *****************\n\n\n" );

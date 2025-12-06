@@ -141,6 +141,13 @@ cvar_t  *r_lightmap;
 cvar_t  *r_vertexLight;
 cvar_t  *r_uiFullScreen;
 cvar_t  *r_shadows;
+cvar_t  *r_shadowMapSize;
+cvar_t  *r_shadowCascades;
+cvar_t  *r_shadowBias;
+cvar_t  *r_shadowSoftness;
+cvar_t  *r_ssaoRadius;
+cvar_t  *r_ssaoBias;
+cvar_t  *r_ssaoIntensity;
 cvar_t  *r_portalsky;   //----(SA)	added
 cvar_t  *r_flares;
 cvar_t  *r_mode;
@@ -1382,6 +1389,27 @@ void R_Register( void ) {
 	r_maxpolyverts = ri.Cvar_Get( "r_maxpolyverts", va( "%d", MAX_POLYVERTS ), 0 );
 
 	r_highQualityVideo = ri.Cvar_Get( "r_highQualityVideo", "1", CVAR_ARCHIVE );
+	
+	// Modern rendering features
+	r_glsl = ri.Cvar_Get( "r_glsl", "1", CVAR_ARCHIVE | CVAR_LATCH );
+	r_hdr = ri.Cvar_Get( "r_hdr", "0", CVAR_ARCHIVE | CVAR_LATCH );
+	r_hdrExposure = ri.Cvar_Get( "r_hdrExposure", "0.0", CVAR_ARCHIVE );
+	r_hdrGamma = ri.Cvar_Get( "r_hdrGamma", "2.2", CVAR_ARCHIVE );
+	r_tonemap = ri.Cvar_Get( "r_tonemap", "0", CVAR_ARCHIVE );
+	r_ssao = ri.Cvar_Get( "r_ssao", "0", CVAR_ARCHIVE );
+	r_ssaoRadius = ri.Cvar_Get( "r_ssaoRadius", "0.5", CVAR_ARCHIVE );
+	r_ssaoBias = ri.Cvar_Get( "r_ssaoBias", "0.025", CVAR_ARCHIVE );
+	r_ssaoIntensity = ri.Cvar_Get( "r_ssaoIntensity", "2.0", CVAR_ARCHIVE );
+	r_pbr = ri.Cvar_Get( "r_pbr", "0", CVAR_ARCHIVE | CVAR_LATCH );
+	r_normalMapping = ri.Cvar_Get( "r_normalMapping", "1", CVAR_ARCHIVE );
+	r_specularMapping = ri.Cvar_Get( "r_specularMapping", "1", CVAR_ARCHIVE );
+	
+	// Shadow mapping
+	r_shadowMapSize = ri.Cvar_Get( "r_shadowMapSize", "2048", CVAR_ARCHIVE | CVAR_LATCH );
+	r_shadowCascades = ri.Cvar_Get( "r_shadowCascades", "4", CVAR_ARCHIVE | CVAR_LATCH );
+	r_shadowBias = ri.Cvar_Get( "r_shadowBias", "0.005", CVAR_ARCHIVE );
+	r_shadowSoftness = ri.Cvar_Get( "r_shadowSoftness", "1.0", CVAR_ARCHIVE );
+	
 	// make sure all the commands added here are also
 	// removed in R_Shutdown
 	ri.Cmd_AddCommand( "imagelist", R_ImageList_f );
@@ -1493,6 +1521,12 @@ void R_Init( void ) {
 	R_InitFreeType();
 
 	RB_ZombieFXInit();
+	
+	// Initialize modern rendering features
+	R_InitGLSL();
+	R_InitHDRFramebuffers();
+	R_InitShadowMaps();
+	R_InitSSAO();
 
 	err = qglGetError();
 	if ( err != GL_NO_ERROR ) {
@@ -1532,6 +1566,12 @@ void RE_Shutdown( qboolean destroyWindow ) {
 		R_IssuePendingRenderCommands();
 		R_DeleteTextures();
 	}
+	
+	// Shutdown modern rendering features
+	R_ShutdownSSAO();
+	R_ShutdownShadowMaps();
+	R_ShutdownHDRFramebuffers();
+	R_ShutdownGLSL();
 
 	R_DoneFreeType();
 

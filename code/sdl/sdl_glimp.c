@@ -450,6 +450,47 @@ static void GLimp_ClearProcAddresses( void ) {
 
 /*
 ===============
+GLimp_LoadGLSLProcs
+
+Load OpenGL 2.0 functions for GLSL support even when using fixed-function pipeline.
+===============
+*/
+qboolean GLimp_LoadGLSLProcs( void ) {
+	qboolean success = qtrue;
+
+	if ( !QGL_VERSION_ATLEAST( 2, 0 ) ) {
+		return qfalse;
+	}
+
+	// Check if already loaded
+	if ( qglCreateProgram != NULL ) {
+		return qtrue;
+	}
+
+#ifdef __SDL_NOGETPROCADDR__
+#define GLE( ret, name, ... ) qgl##name = gl#name;
+#else
+#define GLE( ret, name, ... ) qgl##name = (name##proc *) SDL_GL_GetProcAddress("gl" #name); \
+	if ( qgl##name == NULL ) { \
+		ri.Printf( PRINT_WARNING, "Missing OpenGL 2.0 function %s\n", "gl" #name ); \
+		success = qfalse; \
+	}
+#endif
+
+	QGL_2_0_PROCS;
+	QGL_ARB_framebuffer_object_PROCS;
+
+#undef GLE
+
+	if ( success ) {
+		ri.Printf( PRINT_ALL, "OpenGL 2.0 GLSL functions loaded successfully\n" );
+	}
+
+	return success;
+}
+
+/*
+===============
 GLimp_SetMode
 ===============
 */

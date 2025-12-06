@@ -499,6 +499,11 @@ extern void ServerInfo_Cache( void );
 //
 extern void UI_GraphicsOptionsMenu( void );
 extern void GraphicsOptions_Cache( void );
+
+//
+// ui_graphics_enhancements.c
+//
+extern void UI_AddVisualEnhancementOptions( menuDef_t *menu, int startY );
 extern void DriverInfo_Cache( void );
 
 //

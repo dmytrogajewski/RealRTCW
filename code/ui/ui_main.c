@@ -4406,6 +4406,18 @@ static void UI_Update( const char *name ) {
 			trap_Cvar_SetValue( "r_picmip2", 0 );
 			trap_Cvar_SetValue( "r_overBrightBits", 0 );
 
+			// Modern visual enhancements - Ultra quality
+			trap_Cvar_SetValue( "r_glsl", 1 );
+			trap_Cvar_SetValue( "r_hdr", 1 );
+			trap_Cvar_SetValue( "r_tonemap", 1 );
+			trap_Cvar_SetValue( "r_pbr", 1 );
+			trap_Cvar_SetValue( "r_ssao", 1 );
+			trap_Cvar_SetValue( "r_shadows", 2 );
+			trap_Cvar_SetValue( "r_shadowMapSize", 4096 );
+			trap_Cvar_SetValue( "r_shadowCascades", 4 );
+			trap_Cvar_SetValue( "r_hdrExposure", 0.0 );
+			trap_Cvar_SetValue( "r_hdrGamma", 2.2 );
+
 #ifdef USE_BLOOM
 			trap_Cvar_SetValue( "r_bloom", 0 );
 #endif
@@ -4452,6 +4464,19 @@ static void UI_Update( const char *name ) {
 			trap_Cvar_SetValue( "r_picmip", 0 );
 			trap_Cvar_SetValue( "r_picmip2", 0 );
 			trap_Cvar_SetValue( "r_overBrightBits", 0 );
+
+			// Modern visual enhancements - High quality
+			trap_Cvar_SetValue( "r_glsl", 1 );
+			trap_Cvar_SetValue( "r_hdr", 1 );
+			trap_Cvar_SetValue( "r_tonemap", 1 );
+			trap_Cvar_SetValue( "r_pbr", 1 );
+			trap_Cvar_SetValue( "r_ssao", 1 );
+			trap_Cvar_SetValue( "r_shadows", 2 );
+			trap_Cvar_SetValue( "r_shadowMapSize", 2048 );
+			trap_Cvar_SetValue( "r_shadowCascades", 4 );
+			trap_Cvar_SetValue( "r_hdrExposure", 0.0 );
+			trap_Cvar_SetValue( "r_hdrGamma", 2.2 );
+
 #ifdef USE_BLOOM
 			trap_Cvar_SetValue( "r_bloom", 0 );
 #endif
@@ -4497,6 +4522,19 @@ static void UI_Update( const char *name ) {
 			trap_Cvar_SetValue( "r_picmip", 1 );
 			trap_Cvar_SetValue( "r_picmip2", 0 );
 			trap_Cvar_SetValue( "r_overBrightBits", 0 );
+
+			// Modern visual enhancements - Normal quality
+			trap_Cvar_SetValue( "r_glsl", 1 );
+			trap_Cvar_SetValue( "r_hdr", 1 );
+			trap_Cvar_SetValue( "r_tonemap", 1 );
+			trap_Cvar_SetValue( "r_pbr", 1 );
+			trap_Cvar_SetValue( "r_ssao", 0 );
+			trap_Cvar_SetValue( "r_shadows", 2 );
+			trap_Cvar_SetValue( "r_shadowMapSize", 1024 );
+			trap_Cvar_SetValue( "r_shadowCascades", 2 );
+			trap_Cvar_SetValue( "r_hdrExposure", 0.0 );
+			trap_Cvar_SetValue( "r_hdrGamma", 2.2 );
+
 #ifdef USE_BLOOM
 			trap_Cvar_SetValue( "r_bloom", 0 );
 #endif
@@ -4543,6 +4581,16 @@ static void UI_Update( const char *name ) {
 			trap_Cvar_SetValue( "r_picmip", 2 );
 			trap_Cvar_SetValue( "r_picmip2", 0 );
 			trap_Cvar_SetValue( "r_overBrightBits", 0 );
+
+			// Modern visual enhancements - Low quality (basic features only)
+			trap_Cvar_SetValue( "r_glsl", 1 );
+			trap_Cvar_SetValue( "r_hdr", 1 );
+			trap_Cvar_SetValue( "r_tonemap", 1 );
+			trap_Cvar_SetValue( "r_pbr", 1 );
+			trap_Cvar_SetValue( "r_ssao", 0 );
+			trap_Cvar_SetValue( "r_shadows", 0 );
+			trap_Cvar_SetValue( "r_hdrExposure", 0.0 );
+			trap_Cvar_SetValue( "r_hdrGamma", 2.2 );
 
 #ifdef USE_BLOOM
 			trap_Cvar_SetValue( "r_bloom", 0 );
