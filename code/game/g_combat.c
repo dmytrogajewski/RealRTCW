@@ -35,6 +35,7 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "g_local.h"
 #include "g_survival.h"
+#include "ai_llm.h"
 
 #include <pthread.h>
 #include <unistd.h>
@@ -424,6 +425,11 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	char        *killerName, *obit;
 	qboolean nogib = qtrue;
 
+	// Pause LLM processing immediately when player dies to prevent crashes
+	// This prevents the LLM from accessing entities that are being destroyed
+	if (LLM_IsReady()) {
+		LLM_PauseProcessing(qtrue);
+	}
 
 	// Check if the player has the PERK_SECONDCHANCE perk
     if (self->client->ps.perks[PERK_SECONDCHANCE]) {

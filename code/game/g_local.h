@@ -1255,6 +1255,12 @@ extern vmCvar_t	g_flushItems;
 extern vmCvar_t g_vanilla_guns;
 extern vmCvar_t g_specialWaves;
 
+// Advanced AI tactical systems
+extern vmCvar_t ai_squad_coordination;
+extern vmCvar_t ai_tactical_memory;
+extern vmCvar_t ai_adaptive_strategy;
+extern vmCvar_t ai_formation_strict;
+
 // Safe endgame fix
 extern qboolean g_endgameTriggered;
 
@@ -1304,7 +1310,7 @@ int     trap_BotAllocateClient( void );
 void    trap_BotFreeClient( int clientNum );
 void    trap_GetUsercmd( int clientNum, usercmd_t *cmd );
 qboolean    trap_GetEntityToken( char *buffer, int bufferSize );
-qboolean trap_GetTag( int clientNum, char *tagName, orientation_t * or );
+qboolean trap_GetTag( int clientNum, char *tagName, orientation_t * orient );
 
 int     trap_DebugPolygonCreate( int color, int numPoints, vec3_t *points );
 void    trap_DebugPolygonDelete( int id );

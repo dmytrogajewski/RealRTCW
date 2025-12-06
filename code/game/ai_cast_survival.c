@@ -1248,6 +1248,12 @@ void AICast_SurvivalRespawn(gentity_t *ent, cast_state_t *cs) {
 				ent->client->ps.eFlags &= ~EF_FORCE_END_FRAME;
 				ent->client->ps.eFlags |= EF_NO_TURN_ANIM;
 
+				// Clear AI script state to prevent executing old script commands
+				memset( &cs->castScriptStatus, 0, sizeof( cs->castScriptStatus ) );
+				cs->castScriptStatus.scriptGotoEnt = -1;
+				cs->castScriptStatus.scriptGotoId = -1;
+				cs->castScriptStatus.scriptAttackEnt = -1;
+
 				// play the revive animation
 				cs->revivingTime = level.time + BG_AnimScriptEvent( &ent->client->ps, ANIM_ET_REVIVE, qfalse, qtrue );
 

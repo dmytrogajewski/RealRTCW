@@ -350,7 +350,12 @@ void G_Script_ScriptParse( gentity_t *ent ) {
 
 		if ( !token[0] ) {
 			if ( !wantName ) {
-				G_Error( "G_Script_ScriptParse(), Error (line %d): '}' expected, end of script found.\n", COM_GetCurrentParseLine() );
+				// Make this a warning instead of fatal error - allow game to continue
+				G_Printf( "^3WARNING: G_Script_ScriptParse(), Error (line %d): '}' expected, end of script found. Entity: %s (scriptName: %s). Skipping this script.\n", 
+				        COM_GetCurrentParseLine(), ent->targetname ? ent->targetname : "unknown", 
+				        ent->scriptName ? ent->scriptName : "unknown" );
+				// Break out gracefully instead of crashing
+				break;
 			}
 			break;
 		}
@@ -380,6 +385,10 @@ void G_Script_ScriptParse( gentity_t *ent ) {
 			//	G_Script_CheckLevelAttributes( cs, ent, &pScript );
 			//	continue;
 			//}
+			// Store event name for better error messages (before token gets overwritten)
+			char eventNameBuf[64];
+			Q_strncpyz( eventNameBuf, token, sizeof( eventNameBuf ) );
+			
 			eventNum = G_Script_EventForString( token );
 			if ( eventNum < 0 ) {
 				G_Error( "G_Script_ScriptParse(), Error (line %d): unknown event: %s.\n", COM_GetCurrentParseLine(), token );
@@ -396,7 +405,12 @@ void G_Script_ScriptParse( gentity_t *ent ) {
 			while ( ( token = COM_Parse( &pScript ) ) && ( token[0] != '{' ) )
 			{
 				if ( !token[0] ) {
-					G_Error( "G_Script_ScriptParse(), Error (line %d): '}' expected, end of script found.\n", COM_GetCurrentParseLine() );
+					// Make this a warning instead of fatal error - allow game to continue
+					G_Printf( "^3WARNING: G_Script_ScriptParse(), Error (line %d): '}' expected, end of script found. Entity: %s (scriptName: %s), Event: %s. Skipping this event.\n", 
+					        COM_GetCurrentParseLine(), ent->targetname ? ent->targetname : "unknown", 
+					        ent->scriptName ? ent->scriptName : "unknown", eventNameBuf );
+					// Break out of this event's parsing gracefully
+					break;
 				}
 
 				if ( strlen( params ) ) { // add a space between each param
@@ -414,7 +428,12 @@ void G_Script_ScriptParse( gentity_t *ent ) {
 			while ( ( token = COM_Parse( &pScript ) ) && ( token[0] != '}' ) )
 			{
 				if ( !token[0] ) {
-					G_Error( "G_Script_ScriptParse(), Error (line %d): '}' expected, end of script found.\n", COM_GetCurrentParseLine() );
+					// Make this a warning instead of fatal error - allow game to continue
+					G_Printf( "^3WARNING: G_Script_ScriptParse(), Error (line %d): '}' expected, end of script found. Entity: %s (scriptName: %s), Event: %s. Skipping this event.\n", 
+					        COM_GetCurrentParseLine(), ent->targetname ? ent->targetname : "unknown", 
+					        ent->scriptName ? ent->scriptName : "unknown", eventNameBuf );
+					// Break out of this event's parsing gracefully
+					break;
 				}
 
 				action = G_Script_ActionForString( token );
@@ -485,7 +504,12 @@ void G_Script_ScriptParse( gentity_t *ent ) {
 			while ( ( token = COM_Parse( &pScript ) ) )
 			{
 				if ( !token[0] ) {
-					G_Error( "G_Script_ScriptParse(), Error (line %d): '}' expected, end of script found.\n", COM_GetCurrentParseLine() );
+					// Make this a warning instead of fatal error - allow game to continue
+					G_Printf( "^3WARNING: G_Script_ScriptParse(), Error (line %d): '}' expected, end of script found. Entity: %s (scriptName: %s). Skipping.\n", 
+					        COM_GetCurrentParseLine(), ent->targetname ? ent->targetname : "unknown", 
+					        ent->scriptName ? ent->scriptName : "unknown" );
+					// Break out gracefully
+					break;
 				} else if ( token[0] == '{' ) {
 					bracketLevel++;
 				} else if ( token[0] == '}' ) {

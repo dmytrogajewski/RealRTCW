@@ -45,6 +45,10 @@ If you have questions concerning this license or the applicable additional terms
 #include "../botlib/botai.h"          //bot ai interface
 
 #include "ai_cast.h"
+#include "ai_llm.h"
+#include "ai_tactical_memory.h"
+#include "ai_strategy.h"
+#include "ai_squad.h"
 #include "g_survival.h"
 
 #include "../steam/steam.h"
@@ -302,6 +306,57 @@ void AICast_Die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	// record the sighting (FIXME: silent weapons shouldn't do this, but the AI should react in some way)
 	if ( attacker && attacker->client ) {
 		AICast_UpdateVisibility( self, attacker, qtrue, qtrue );
+	}
+	
+	//
+	// Tactical AI: Record death in tactical memory and strategy system
+	if ( ai_tactical_memory.integer && self->aiTeam >= 0 ) {
+		// ALWAYS record friendly casualty for victim's team
+		TacticalMemory_RecordCasualty( self->aiTeam, qtrue );
+		
+		// Record friendly casualty in strategy system
+		if ( ai_adaptive_strategy.integer ) {
+			int survivalTime = (cs && cs->lastLoadTime > 0) ? (level.time - cs->lastLoadTime) : 1000;
+			AICast_RecordKill( self->aiTeam, qtrue, survivalTime );
+		}
+		
+		// If attacker is AI from different team, record enemy kill for attacker
+		if ( attacker && attacker->aiTeam >= 0 && attacker->aiTeam != self->aiTeam ) {
+			TacticalMemory_RemoveEnemy( attacker->aiTeam, self->s.number );
+			
+			// Record as enemy casualty for attacker's team
+			TacticalMemory_RecordCasualty( attacker->aiTeam, qfalse );
+			
+			// Record kill in strategy system
+			if ( ai_adaptive_strategy.integer ) {
+				AICast_RecordKill( attacker->aiTeam, qfalse, 1000 );
+				AICast_RecordEngagement( attacker->aiTeam, qtrue );
+			}
+		}
+		
+		// Log casualty (works for both player and AI attackers)
+		if ( ai_llm_debug.integer ) {
+			const char *attackerName = "Unknown";
+			if ( attacker ) {
+				if ( attacker->client && !attacker->aiCharacter ) {
+					attackerName = "player";
+				} else if ( attacker->aiName ) {
+					attackerName = attacker->aiName;
+				}
+			} else {
+				attackerName = "world";
+			}
+			
+			G_Printf( "^1[CASUALTY] %s killed by %s (Team %d casualty)\n",
+			         self->aiName,
+			         attackerName,
+			         self->aiTeam );
+		}
+	}
+	
+	// Squad AI: Remove dead entity from squad
+	if ( ai_squad_coordination.integer && cs && cs->squadId >= 0 ) {
+		AICast_RemoveSquadMember( cs->squadId, self->s.number );
 	}
 
 	if ( self->aiCharacter == AICHAR_HEINRICH || self->aiCharacter == AICHAR_HELGA || self->aiCharacter == AICHAR_SUPERSOLDIER || self->aiCharacter == AICHAR_SUPERSOLDIER_LAB || self->aiCharacter == AICHAR_PROTOSOLDIER ) {

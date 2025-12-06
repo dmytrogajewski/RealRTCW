@@ -1598,7 +1598,11 @@ char *Info_ValueForKey( const char *s, const char *key ) {
 	}
 
 	if ( strlen( s ) >= BIG_INFO_STRING ) {
-		Com_Error( ERR_DROP, "Info_ValueForKey: oversize infostring" );
+		// Make this a warning instead of fatal error - allow game to continue
+		Com_Printf( "WARNING: Info_ValueForKey: oversize infostring (length: %d, max: %d). Truncating.\n", 
+		           (int)strlen( s ), BIG_INFO_STRING );
+		// Return empty string instead of crashing
+		return "";
 	}
 
 	valueindex ^= 1;
@@ -1693,7 +1697,10 @@ void Info_RemoveKey( char *s, const char *key ) {
 	char    *o;
 
 	if ( strlen( s ) >= MAX_INFO_STRING ) {
-		Com_Error( ERR_DROP, "Info_RemoveKey: oversize infostring" );
+		// Make this a warning instead of fatal error - allow game to continue
+		Com_Printf( "WARNING: Info_RemoveKey: oversize infostring (length: %d, max: %d). Skipping.\n", 
+		           (int)strlen( s ), MAX_INFO_STRING );
+		return; // Skip the operation instead of crashing
 	}
 
 	if ( strchr( key, '\\' ) ) {
@@ -1751,7 +1758,10 @@ void Info_RemoveKey_Big( char *s, const char *key ) {
 	char    *o;
 
 	if ( strlen( s ) >= BIG_INFO_STRING ) {
-		Com_Error( ERR_DROP, "Info_RemoveKey_Big: oversize infostring" );
+		// Make this a warning instead of fatal error - allow game to continue
+		Com_Printf( "WARNING: Info_RemoveKey_Big: oversize infostring (length: %d, max: %d). Skipping.\n", 
+		           (int)strlen( s ), BIG_INFO_STRING );
+		return; // Skip the operation instead of crashing
 	}
 
 	if ( strchr( key, '\\' ) ) {
@@ -1830,7 +1840,10 @@ void Info_SetValueForKey( char *s, const char *key, const char *value ) {
 	const char* blacklist = "\\;\"";
 
 	if ( strlen( s ) >= MAX_INFO_STRING ) {
-		Com_Error( ERR_DROP, "Info_SetValueForKey: oversize infostring" );
+		// Make this a warning instead of fatal error - allow game to continue
+		Com_Printf( "WARNING: Info_SetValueForKey: oversize infostring (length: %d, max: %d). Skipping set operation.\n", 
+		           (int)strlen( s ), MAX_INFO_STRING );
+		return; // Skip the operation instead of crashing
 	}
 
 	for(; *blacklist; ++blacklist)
@@ -1870,7 +1883,10 @@ void Info_SetValueForKey_Big( char *s, const char *key, const char *value ) {
 	const char* blacklist = "\\;\"";
 
 	if ( strlen( s ) >= BIG_INFO_STRING ) {
-		Com_Error( ERR_DROP, "Info_SetValueForKey: oversize infostring" );
+		// Make this a warning instead of fatal error - allow game to continue
+		Com_Printf( "WARNING: Info_SetValueForKey (Big): oversize infostring (length: %d, max: %d). Skipping set operation.\n", 
+		           (int)strlen( s ), BIG_INFO_STRING );
+		return; // Skip the operation instead of crashing
 	}
 
 	for(; *blacklist; ++blacklist)

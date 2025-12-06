@@ -98,6 +98,12 @@ If you have questions concerning this license or the applicable additional terms
 #define AIFL_SPECIAL_FUNC       0x8000000   // prevent external interuption of current think func
 #define AIFL_NOLADDER           0x10000000 
 
+// Squad roles
+#define SQUAD_ROLE_NONE         0
+#define SQUAD_ROLE_LEADER       1   // Coordinates squad, makes tactical decisions
+#define SQUAD_ROLE_SCOUT        2   // Forward reconnaissance, enemy spotting
+#define SQUAD_ROLE_ASSAULT      3   // Aggressive engagement, flanking
+#define SQUAD_ROLE_SUPPORT      4   // Covering fire, defensive positions
 
 //
 // predict events
@@ -588,6 +594,28 @@ typedef struct cast_state_s
 	int respawnsleft;
 
 	qboolean registeredSurvivalKill;
+	
+	// LLM Integration
+	int llm_lastStrategicUpdateTime;      // last time we requested a strategic decision from LLM
+	int llm_lastDialogueTime;             // last time we generated dialogue
+	int llm_nextDialogueAllowedTime;      // don't spam dialogue, wait until this time
+	qboolean llm_pendingStrategicRequest; // waiting for strategic decision from LLM
+	qboolean llm_pendingDialogueRequest;  // waiting for dialogue from LLM
+	
+	// Squad Coordination
+	int squadId;                          // which squad this AI belongs to (-1 = no squad)
+	int squadRole;                        // SQUAD_ROLE_* (leader, scout, assault, support)
+	int squadLeaderNum;                   // entity number of squad leader (-1 if no leader)
+	vec3_t squadFormationOffset;          // position offset in squad formation
+	int lastSquadOrderTime;               // last time received squad order
+	char squadOrder[64];                  // current squad order string
+	int squadMemberCount;                 // number of members in this squad (for leaders)
+	int squadMembers[8];                  // entity numbers of squad members (for leaders)
+	
+	// LLM Tactical Decision (current active decision from LLM)
+	int llm_currentAction;                // Current llm_action_t to execute
+	int llm_actionStartTime;              // When this action started
+	vec3_t llm_targetPosition;            // Target position for current action
 	
 } cast_state_t;
 //

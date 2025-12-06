@@ -45,6 +45,10 @@ If you have questions concerning this license or the applicable additional terms
 #include "../botlib/botai.h"          //bot ai interface
 
 #include "ai_cast.h"
+#include "ai_llm.h"
+#include "ai_tactical_memory.h"
+#include "ai_squad.h"
+#include "ai_strategy.h"
 
 /*
 The lowest level of Cast AI thinking.
@@ -598,6 +602,12 @@ void AICast_Think( int client, float thinktime ) {
 				ent->client->ps.eFlags &= ~EF_FORCE_END_FRAME;
 				ent->client->ps.eFlags |= EF_NO_TURN_ANIM;
 
+				// Clear AI script state to prevent executing old script commands
+				memset( &cs->castScriptStatus, 0, sizeof( cs->castScriptStatus ) );
+				cs->castScriptStatus.scriptGotoEnt = -1;
+				cs->castScriptStatus.scriptGotoId = -1;
+				cs->castScriptStatus.scriptAttackEnt = -1;
+
 				// play the revive animation
 				cs->revivingTime = level.time + BG_AnimScriptEvent( &ent->client->ps, ANIM_ET_REVIVE, qfalse, qtrue );
 
@@ -775,6 +785,170 @@ void AICast_Think( int client, float thinktime ) {
 		//if (!AICast_GotEnoughAmmoForWeapon( cs, cs->weaponNum )) {
 		//	cs->weaponNum = WP_NONE;
 		//}
+	}
+	//
+	// Tactical Memory: Update what this NPC sees and knows
+	if ( ent->aiTeam >= 0 ) {
+		// Update friendly position
+		TacticalMemory_UpdateFriendly( ent->aiTeam, client, ent->r.currentOrigin, ent->health );
+		
+		// Update enemy information if we see one
+		if ( cs->enemyNum >= 0 && cs->enemyNum < MAX_GENTITIES ) {
+			gentity_t *enemy = &g_entities[cs->enemyNum];
+			if ( enemy->inuse && cs->vislist[cs->enemyNum].visible_timestamp > level.time - 1000 ) {
+				vec3_t enemyVel;
+				VectorCopy( enemy->client ? enemy->client->ps.velocity : vec3_origin, enemyVel );
+				TacticalMemory_UpdateEnemy( ent->aiTeam, cs->enemyNum, enemy->r.currentOrigin,
+				                             enemyVel, enemy->s.weapon, qtrue );
+				
+				// Log enemy updates (periodically)
+				static int lastEnemyLog[MAX_CLIENTS] = {0};
+				if ( ai_llm_debug.integer && level.time - lastEnemyLog[client] > 10000 ) {
+					vec3_t diff;
+					VectorSubtract( enemy->r.currentOrigin, ent->r.currentOrigin, diff );
+					float dist = VectorLength( diff );
+					G_Printf( "^3[INTEL] %s spotted enemy at %.0f units, shared with team %d\n",
+					         ent->aiName, dist, ent->aiTeam );
+					lastEnemyLog[client] = level.time;
+				}
+			}
+		}
+		
+		// Periodic cleanup of stale tactical data (every 5 seconds)
+		if ( level.time % 5000 < 100 ) {
+			TacticalMemory_CleanupStaleData( ent->aiTeam, level.time, 30000 );
+		}
+		
+		// Periodic tactical status report (every 15 seconds for first squad member)
+		static int lastTacticalReport = 0;
+		if ( ai_llm_debug.integer && client == 1 && level.time - lastTacticalReport > 15000 ) {
+			tactical_memory_t *tm = TacticalMemory_GetForTeam( ent->aiTeam );
+			if ( tm ) {
+				int threatCount = TacticalMemory_GetThreatCount( ent->aiTeam );
+				G_Printf( "^2[TACTICAL STATUS] Team %d: %d active threats, %d friendlies, Morale: %.2f\n",
+				         ent->aiTeam, threatCount, tm->friendlyCount, tm->teamMorale );
+				lastTacticalReport = level.time;
+			}
+		}
+	}
+	
+	//
+	// Squad Coordination
+	if ( cs->squadId >= 0 ) {
+		// Squad leaders think tactically
+		if ( cs->squadRole == SQUAD_ROLE_LEADER ) {
+			AICast_SquadLeaderThink( cs );
+		}
+		
+		// Squad members execute leader's orders
+		if ( cs->squadRole != SQUAD_ROLE_LEADER && cs->squadLeaderNum >= 0 ) {
+			AICast_SquadMemberExecute( cs );
+		}
+	}
+	
+	//
+	// Adaptive Strategy: Periodic evaluation (every 30 seconds)
+	if ( cs->squadRole == SQUAD_ROLE_LEADER && ent->aiTeam >= 0 ) {
+		if ( level.time % 30000 < 100 ) {
+			AICast_AdaptStrategy( ent->aiTeam );
+		}
+	}
+	
+	//
+	// LLM Integration: Request strategic decisions and dialogue periodically
+	if ( LLM_IsReady() && ai_llm_enabled.integer ) {
+		// Strategic decision updates
+		int strategicInterval = ai_llm_strategic_interval.integer * 1000; // convert to ms
+		if ( strategicInterval > 0 && 
+			 cs->llm_lastStrategicUpdateTime + strategicInterval < level.time &&
+			 !cs->llm_pendingStrategicRequest ) {
+			// Only request decisions for AI in combat or alert states
+			if ( cs->aiState >= AISTATE_ALERT ) {
+				LLM_RequestStrategicDecision( cs );
+				cs->llm_pendingStrategicRequest = qtrue;
+				cs->llm_lastStrategicUpdateTime = level.time;
+			}
+		}
+		
+		// Check for completed strategic decisions
+		if ( cs->llm_pendingStrategicRequest ) {
+			llm_decision_t decision;
+			if ( LLM_GetStrategicDecision( cs->entityNum, &decision ) ) {
+				cs->llm_pendingStrategicRequest = qfalse;
+				if ( decision.isValid && ai_llm_debug.integer ) {
+					const char *roleStr = "None";
+					switch ( cs->squadRole ) {
+						case SQUAD_ROLE_LEADER: roleStr = "LEADER"; break;
+						case SQUAD_ROLE_SCOUT: roleStr = "SCOUT"; break;
+						case SQUAD_ROLE_ASSAULT: roleStr = "ASSAULT"; break;
+						case SQUAD_ROLE_SUPPORT: roleStr = "SUPPORT"; break;
+					}
+					
+					squad_t *squad = AICast_GetSquad( cs->entityNum );
+					if ( squad && squad->active ) {
+					G_Printf( "^7[LLM] %s (%s, Squad %d, %d members): %s (%.2f conf) - %s\n",
+							  ent->aiName, roleStr, cs->squadId, squad->memberCount,
+							  LLM_ActionToString( decision.action ),
+							  decision.confidence, decision.reasoning );
+				} else {
+					G_Printf( "^7[LLM] %s (%s): %s (%.2f conf) - %s\n",
+							  ent->aiName, roleStr,
+							  LLM_ActionToString( decision.action ),
+							  decision.confidence, decision.reasoning );
+				}
+			}
+				
+				// Store decision in cast state - executed by AIFunc_Battle() in ai_cast_funcs.c
+				cs->llm_currentAction = decision.action;
+				cs->llm_actionStartTime = level.time;
+				VectorCopy( decision.targetPosition, cs->llm_targetPosition );
+				
+				if ( ai_llm_debug.integer >= 2 ) {
+					G_Printf( "^2[AI ACTION QUEUED] %s will execute: %s\n",
+					         ent->aiName, LLM_ActionToString( decision.action ) );
+				}
+			}
+		}
+		
+		// Dialogue generation
+		int dialogueInterval = ai_llm_dialogue_interval.integer * 1000; // convert to ms
+		if ( dialogueInterval > 0 &&
+			 cs->llm_lastDialogueTime + dialogueInterval < level.time &&
+			 cs->llm_nextDialogueAllowedTime < level.time &&
+			 !cs->llm_pendingDialogueRequest ) {
+			// Generate dialogue for combat events
+			const char *eventType = NULL;
+			if ( cs->enemyNum >= 0 && cs->vislist[cs->enemyNum].visible_timestamp > level.time - 500 ) {
+				if ( cs->vislist[cs->enemyNum].visible_timestamp > level.time - 200 ) {
+					eventType = "enemy_spotted";
+				} else if ( cs->aiState == AISTATE_COMBAT ) {
+					eventType = "taking_fire";
+				}
+			}
+			
+			if ( eventType ) {
+				LLM_RequestDialogue( cs, eventType );
+				cs->llm_pendingDialogueRequest = qtrue;
+				cs->llm_lastDialogueTime = level.time;
+			}
+		}
+		
+		// Check for completed dialogue
+		if ( cs->llm_pendingDialogueRequest ) {
+			llm_dialogue_t dialogue;
+			if ( LLM_GetDialogue( cs->entityNum, &dialogue ) ) {
+				cs->llm_pendingDialogueRequest = qfalse;
+				if ( dialogue.shouldSpeak && dialogue.text[0] ) {
+					// Display the dialogue
+					trap_SendServerCommand( -1, va( "cp \"[%s]: %s\"", ent->aiName, dialogue.text ) );
+					if ( ai_llm_debug.integer ) {
+						G_Printf( "LLM Dialogue [%s]: %s\n", ent->aiName, dialogue.text );
+					}
+					// Prevent dialogue spam
+					cs->llm_nextDialogueAllowedTime = level.time + 3000 + ( rand() % 2000 );
+				}
+			}
+		}
 	}
 	//
 	// in query mode, we do special handling (pause scripting, check for transition to alert/combat, etc)
@@ -977,6 +1151,30 @@ void AICast_StartFrame( int time ) {
 			if ( ++castcount >= numcast ) {
 				break;
 			}
+		}
+	}
+	//
+	// Assign squads after NPCs have had time to spawn
+	if ( ai_squad_coordination.integer ) {
+		static qboolean squadsAssigned = qfalse;
+		static int squadAssignmentTime = 0;
+		
+		// Wait a few seconds after level start to let NPCs spawn
+		if ( !squadsAssigned && time > squadAssignmentTime + 3000 ) {
+			if ( numcast > 0 ) {
+				AICast_AssignSquads();
+				squadsAssigned = qtrue;
+				G_Printf( "Squad assignment completed (delayed for NPC spawning)\n" );
+			} else {
+				// Try again in 1 second
+				squadAssignmentTime = time;
+			}
+		}
+		
+		// Reset on new level
+		if ( time < 100 ) {
+			squadsAssigned = qfalse;
+			squadAssignmentTime = 0;
 		}
 	}
 	//

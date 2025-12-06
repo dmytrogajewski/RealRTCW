@@ -32,6 +32,10 @@ If you have questions concerning this license or the applicable additional terms
 #include "g_local.h"
 #include "g_survival.h"
 #include "../../steam/steam.h"
+#include "ai_llm.h"
+#include "ai_tactical_memory.h"
+#include "ai_squad.h"
+#include "ai_strategy.h"
 
 level_locals_t level;
 
@@ -184,6 +188,21 @@ vmCvar_t g_playerSurvivalClass;
 
 vmCvar_t g_mapname;
 
+// LLM Integration cvars
+vmCvar_t ai_llm_enabled;
+vmCvar_t ai_llm_strategic_interval;
+vmCvar_t ai_llm_dialogue_interval;
+vmCvar_t ai_llm_max_threads;
+vmCvar_t ai_llm_debug;
+vmCvar_t ai_llm_model_path;
+vmCvar_t ai_llm_gpu_layers;
+
+// Advanced AI tactical systems
+vmCvar_t ai_squad_coordination;     // Enable squad AI
+vmCvar_t ai_tactical_memory;        // Enable shared tactical memory
+vmCvar_t ai_adaptive_strategy;      // Enable adaptive tactics
+vmCvar_t ai_formation_strict;       // How strictly to maintain formations
+
 cvarTable_t gameCvarTable[] = {
 	// don't override the cheat state set by the system
 	{&g_cheats, "sv_cheats", "", 0, qfalse},
@@ -326,7 +345,23 @@ cvarTable_t gameCvarTable[] = {
 	{&g_bodysink, "g_bodysink", "0", CVAR_ARCHIVE},
 	{&g_weaponfalloff, "g_weaponfalloff", "0", CVAR_ARCHIVE},
 	{&g_flushItems, "g_flushItems", "1", 0},
-	{&g_mapname, "mapname", "", CVAR_ARCHIVE}};
+	{&g_mapname, "mapname", "", CVAR_ARCHIVE},
+	
+	// LLM Integration
+	{&ai_llm_enabled, "ai_llm_enabled", "0", CVAR_ARCHIVE, 0, qfalse},
+	{&ai_llm_strategic_interval, "ai_llm_strategic_interval", "3", CVAR_ARCHIVE, 0, qfalse},
+	{&ai_llm_dialogue_interval, "ai_llm_dialogue_interval", "5", CVAR_ARCHIVE, 0, qfalse},
+	{&ai_llm_max_threads, "ai_llm_max_threads", "4", CVAR_ARCHIVE, 0, qfalse},
+	{&ai_llm_debug, "ai_llm_debug", "0", CVAR_ARCHIVE, 0, qfalse},
+	{&ai_llm_model_path, "ai_llm_model_path", "main/models/qwen3-4b.gguf", CVAR_ARCHIVE, 0, qfalse},
+	{&ai_llm_gpu_layers, "ai_llm_gpu_layers", "37", CVAR_ARCHIVE, 0, qfalse},
+	
+	// Advanced AI tactical systems
+	{&ai_squad_coordination, "ai_squad_coordination", "1", CVAR_ARCHIVE, 0, qfalse},
+	{&ai_tactical_memory, "ai_tactical_memory", "1", CVAR_ARCHIVE, 0, qfalse},
+	{&ai_adaptive_strategy, "ai_adaptive_strategy", "1", CVAR_ARCHIVE, 0, qfalse},
+	{&ai_formation_strict, "ai_formation_strict", "0.7", CVAR_ARCHIVE, 0, qfalse}
+};
 
 static int gameCvarTableSize = ARRAY_LEN( gameCvarTable );
 
@@ -1277,6 +1312,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	int i;
 
 	steamInit();
+	
+	// Pause LLM processing during initialization
+	if (LLM_IsReady()) {
+		LLM_PauseProcessing(qtrue);
+	}
 
 	srand( randomSeed );
 
@@ -1350,8 +1390,33 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 		AICast_Init();
 		// done.
+		
+		// Initialize tactical AI systems
+		if ( ai_tactical_memory.integer ) {
+			TacticalMemory_Init();
+		}
+		
+		if ( ai_adaptive_strategy.integer ) {
+			AICast_StrategyInit();
+		}
+		
+		// Initialize LLM system if enabled
+		if ( ai_llm_enabled.integer ) {
+			if ( !LLM_Init( ai_llm_model_path.string ) ) {
+				G_Printf( "^3WARNING: LLM initialization failed. AI will use traditional decision making.\n" );
+				trap_Cvar_Set( "ai_llm_enabled", "0" );
+			} else {
+				G_Printf( "^2LLM system initialized successfully.\n" );
+			}
+		}
 
 		AICast_ScriptLoad();
+		
+		// Initialize squad system after scripts are loaded
+		if ( ai_squad_coordination.integer ) {
+			AICast_SquadInit();
+			// Note: Squad assignment will happen in AICast_StartFrame after NPCs spawn
+		}
 
 		trap_Cvar_VariableStringBuffer( "g_missionStats", s, sizeof( s ) );
 		if ( strlen( s ) < 1 ) {
@@ -1415,6 +1480,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	steamSetRichPresence( "Mapname", g_mapname.string );
 	steamSetRichPresence( "Skill", G_GameSkillIntToStr( g_gameskill.integer ) ) ;
 	steamSetRichPresence( "steam_display", "#status_map" );
+	
+	// Resume LLM processing now that init is complete
+	if (LLM_IsReady()) {
+		LLM_PauseProcessing(qfalse);
+		G_Printf("LLM processing resumed after game init\n");
+	}
 }
 
 
@@ -1425,6 +1496,11 @@ G_ShutdownGame
 =================
 */
 void G_ShutdownGame( int restart ) {
+
+	// Pause LLM processing IMMEDIATELY to prevent accessing destroyed entities
+	if (LLM_IsReady()) {
+		LLM_PauseProcessing(qtrue);
+	}
 
 	if ( level.logFile ) {
 		G_LogPrintf( "ShutdownGame:\n" );
@@ -1457,6 +1533,24 @@ void G_ShutdownGame( int restart ) {
 
 	if ( trap_Cvar_VariableIntegerValue( "bot_enable" ) ) {
 		BotAIShutdown( restart );
+	}
+	
+	// Shutdown tactical AI systems
+	if ( ai_squad_coordination.integer ) {
+		AICast_SquadShutdown();
+	}
+	
+	if ( ai_adaptive_strategy.integer ) {
+		AICast_StrategyShutdown();
+	}
+	
+	if ( ai_tactical_memory.integer ) {
+		TacticalMemory_Shutdown();
+	}
+	
+	// Shutdown LLM system
+	if ( LLM_IsReady() ) {
+		LLM_Shutdown();
 	}
 
 	if ( !restart ) {

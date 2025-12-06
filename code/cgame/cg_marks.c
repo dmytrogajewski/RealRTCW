@@ -274,7 +274,6 @@ CG_AddMarks
 void CG_AddMarks( void ) {
 	int j;
 	markPoly_t  *mp, *next;
-	int t;
 	int fade;
 
 	if ( !cg_markTime.integer ) {
@@ -283,17 +282,8 @@ void CG_AddMarks( void ) {
 
 	mp = cg_activeMarkPolys.nextMark;
 	for ( ; mp != &cg_activeMarkPolys ; mp = next ) {
-		// grab next now, so if the local entity is freed we
-		// still have it
 		next = mp->nextMark;
 
-		// see if it is time to completely remove it
-		if ( cg.time > mp->time + mp->duration ) {
-			CG_FreeMarkPoly( mp );
-			continue;
-		}
-
-		// fade out the energy bursts
 		if ( mp->markShader == cgs.media.energyMarkShader ) {
 
 			fade = 450 - 450 * ( ( cg.time - mp->time ) / 3000.0 );
@@ -319,29 +309,12 @@ void CG_AddMarks( void ) {
 				if ( fade < 0 ) {
 					fade = 0;
 				}
-				if ( mp->verts[0].modulate[0] != 0 ) {
+				if ( mp->verts[0].modulate[0] ) {
 					for ( j = 0 ; j < mp->poly.numVerts ; j++ ) {
 						mp->verts[j].modulate[0] = mp->color[0] * fade;
 						mp->verts[j].modulate[1] = mp->color[1] * fade;
 						mp->verts[j].modulate[2] = mp->color[2] * fade;
 					}
-				}
-			}
-		}
-
-		// fade all marks out with time
-		t = mp->time + mp->duration - cg.time;
-		if ( t < (float)mp->duration / 2.0 ) {
-			fade = (int)( 255.0 * (float)t / ( (float)mp->duration / 2.0 ) );
-			if ( mp->alphaFade ) {
-				for ( j = 0 ; j < mp->poly.numVerts ; j++ ) {
-					mp->verts[j].modulate[3] = fade;
-				}
-			} else {
-				for ( j = 0 ; j < mp->poly.numVerts ; j++ ) {
-					mp->verts[j].modulate[0] = mp->color[0] * fade;
-					mp->verts[j].modulate[1] = mp->color[1] * fade;
-					mp->verts[j].modulate[2] = mp->color[2] * fade;
 				}
 			}
 		}

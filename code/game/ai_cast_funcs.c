@@ -47,6 +47,10 @@ If you have questions concerning this license or the applicable additional terms
 #include "../botlib/botai.h"          //bot ai interface
 
 #include "ai_cast.h"
+#include "ai_llm.h"
+#include "ai_squad.h"
+#include "ai_tactical_memory.h"
+#include "ai_strategy.h"
 #include "g_survival.h"
 
 #include "../steam/steam.h"
@@ -4688,6 +4692,195 @@ char *AIFunc_Battle( cast_state_t *cs ) {
 	if ( cs->leaderNum >= 0 && Distance( cs->bs->origin, g_entities[cs->leaderNum].r.currentOrigin ) > MAX_LEADER_DIST ) {
 		return AIFunc_ChaseGoalStart( cs, cs->leaderNum, AICAST_LEADERDIST_MAX, qtrue );
 	}
+	
+	//
+	// Execute LLM Tactical Actions - override traditional AI with LLM decisions
+	if ( LLM_IsReady() && ai_llm_enabled.integer && cs->llm_currentAction != LLM_ACTION_NONE ) {
+		int actionAge = level.time - cs->llm_actionStartTime;
+		
+		// Execute LLM action if it's recent (within 15 seconds)
+		if ( actionAge < 15000 ) {
+			static int lastActionLog[MAX_CLIENTS] = {0};
+			qboolean logAction = ( ai_llm_debug.integer && level.time - lastActionLog[cs->entityNum] > 3000 );
+			
+			switch ( cs->llm_currentAction ) {
+				case LLM_ACTION_RETREAT:
+					// Actually retreat - move away from enemy
+					if ( cs->enemyNum >= 0 ) {
+						vec3_t retreatDir, retreatPos;
+						float retreatDist = 384.0f;  // Retreat 384 units back
+						
+						// Calculate direction away from enemy
+						VectorSubtract( cs->bs->origin, enemy->r.currentOrigin, retreatDir );
+						retreatDir[2] = 0;  // Keep horizontal
+						VectorNormalize( retreatDir );
+						
+						// Calculate retreat position
+						VectorMA( cs->bs->origin, retreatDist, retreatDir, retreatPos );
+						
+						// Set as combat goal
+						VectorCopy( retreatPos, cs->combatGoalOrigin );
+						cs->combatGoalTime = level.time + 8000;  // 8 seconds to retreat
+						
+						// Lower aggression significantly
+						cs->attributes[AGGRESSION] = 0.2f;
+						cs->attributes[TACTICAL] = 0.9f;
+						
+						if ( logAction ) {
+							G_Printf( "^2[AI EXECUTE] %s retreating from combat (falling back %.0f units)\n", 
+							         ent->aiName, retreatDist );
+							lastActionLog[cs->entityNum] = level.time;
+						}
+					}
+					break;
+					
+				case LLM_ACTION_HOLD_POSITION:
+					// Take defensive position
+					if ( logAction ) {
+						G_Printf( "^2[AI EXECUTE] %s holding defensive position\n", ent->aiName );
+						lastActionLog[cs->entityNum] = level.time;
+					}
+					if ( AICast_GetTakeCoverPos( cs, cs->enemyNum, enemy->r.currentOrigin, cs->takeCoverPos ) ) {
+						cs->takeCoverTime = level.time + 6000;
+						cs->attackcrouch_time = level.time + 8000;  // Stay crouched
+						return AIFunc_BattleTakeCoverStart( cs );
+					}
+					// If no cover, just reduce aggression
+					cs->attributes[AGGRESSION] = 0.3f;
+					cs->attributes[TACTICAL] = 0.85f;
+					break;
+					
+				case LLM_ACTION_AMBUSH:
+					// Set up ambush
+					if ( logAction ) {
+						G_Printf( "^2[AI EXECUTE] %s setting up ambush\n", ent->aiName );
+						lastActionLog[cs->entityNum] = level.time;
+					}
+					return AIFunc_BattleAmbushStart( cs );
+					
+				case LLM_ACTION_FLANK_LEFT:
+				case LLM_ACTION_FLANK_RIGHT:
+					// Execute flanking maneuver - move to enemy's flank
+					if ( cs->enemyNum >= 0 ) {
+						vec3_t enemyPos, flankPos, right;
+						gentity_t *enemyEnt = &g_entities[cs->enemyNum];
+						
+						// Calculate flank position 90 degrees to enemy's side
+						VectorCopy( enemyEnt->r.currentOrigin, enemyPos );
+						AngleVectors( enemyEnt->s.angles, NULL, right, NULL );
+						
+						float flankDist = 256.0f;
+						if ( cs->llm_currentAction == LLM_ACTION_FLANK_LEFT ) {
+							VectorMA( enemyPos, -flankDist, right, flankPos );
+						} else {
+							VectorMA( enemyPos, flankDist, right, flankPos );
+						}
+						
+						// Store flank position as target
+						VectorCopy( flankPos, cs->llm_targetPosition );
+						
+						if ( logAction ) {
+							G_Printf( "^2[AI EXECUTE] %s flanking %s (moving to flank position)\n", 
+							         ent->aiName, 
+							         cs->llm_currentAction == LLM_ACTION_FLANK_LEFT ? "LEFT" : "RIGHT" );
+							lastActionLog[cs->entityNum] = level.time;
+						}
+						
+						// High aggression for flanking
+						cs->attributes[AGGRESSION] = 0.95f;
+						return AIFunc_BattleChaseStart( cs );
+					}
+					break;
+					
+				case LLM_ACTION_ADVANCE_COVER:
+					// Bounding overwatch - advance methodically using cover
+					if ( logAction ) {
+						G_Printf( "^2[AI EXECUTE] %s advancing with cover (bounding overwatch)\n", 
+						         ent->aiName );
+						lastActionLog[cs->entityNum] = level.time;
+					}
+					
+					if ( cs->enemyNum >= 0 ) {
+						// Very high tactical, moderate aggression
+						cs->attributes[TACTICAL] = 0.95f;
+						cs->attributes[AGGRESSION] = 0.6f;
+						
+						// Try to find cover point closer to enemy
+						tactical_memory_t *tm = TacticalMemory_GetForTeam( ent->aiTeam );
+						if ( tm ) {
+							int coverIdx;
+							tactical_cover_point_t *cover = TacticalMemory_FindNearestCover(
+								ent->aiTeam, ent->r.currentOrigin, 512.0f, &coverIdx );
+							
+							if ( cover ) {
+								// Move to cover position
+								VectorCopy( cover->position, cs->llm_targetPosition );
+								TacticalMemory_SetCoverOccupied( ent->aiTeam, coverIdx, cs->entityNum );
+								
+								if ( ai_llm_debug.integer >= 2 ) {
+									G_Printf( "^6[COVER] %s moving to cover point\n", ent->aiName );
+								}
+							}
+						}
+						
+						return AIFunc_BattleChaseStart( cs );
+					}
+					break;
+					
+				case LLM_ACTION_SUPPRESS_FIRE:
+				case LLM_ACTION_COVERING_FIRE:
+				case LLM_ACTION_OVERWATCH:
+					// Suppressing fire - hold position and maintain fire
+					if ( logAction ) {
+						G_Printf( "^2[AI EXECUTE] %s providing suppressing fire (holding position)\n", 
+						         ent->aiName );
+						lastActionLog[cs->entityNum] = level.time;
+					}
+					
+					// High aggression but don't chase - suppress from current position
+					cs->attributes[AGGRESSION] = 0.85f;
+					cs->attributes[TACTICAL] = 0.6f;
+					
+					// Force crouch for better stability
+					cs->attackcrouch_time = level.time + 3000;
+					trap_EA_Crouch( cs->entityNum );
+					
+					// Don't chase, stay and shoot
+					// The AI will naturally shoot at enemy without chasing due to high aggression
+					// but we prevent movement by not calling chase functions
+					return NULL;  // Stay in Battle() function, don't switch modes
+					break;
+					
+				case LLM_ACTION_ATTACK:
+					// Aggressive direct assault
+					if ( logAction ) {
+						G_Printf( "^2[AI EXECUTE] %s attacking aggressively\n", ent->aiName );
+						lastActionLog[cs->entityNum] = level.time;
+					}
+				cs->attributes[AGGRESSION] = 1.0f;
+				cs->attributes[TACTICAL] = 0.3f;  // Lower tactical, more aggressive
+				break;
+				
+			case LLM_ACTION_DEFEND:
+					// Defensive posture
+					if ( logAction ) {
+						G_Printf( "^2[AI EXECUTE] %s defending position\n", ent->aiName );
+						lastActionLog[cs->entityNum] = level.time;
+					}
+					cs->attributes[AGGRESSION] = 0.4f;
+					cs->attributes[TACTICAL] = 0.8f;
+					break;
+					
+				default:
+					// Use default behavior
+					break;
+			}
+		} else {
+			// Action expired, clear it
+			cs->llm_currentAction = LLM_ACTION_NONE;
+		}
+	}
+	
 	bs = cs->bs;
 	//if no enemy
 	if ( cs->enemyNum < 0 ) {

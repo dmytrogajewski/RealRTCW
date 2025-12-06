@@ -1400,6 +1400,11 @@ $(Q)$(CC) $(BASEGAME_CFLAGS) -DGAMEDLL -DQAGAME $(SHLIBCFLAGS) $(CFLAGS) $(OPTIM
 $(Q)$(DO_QVM_DEP)
 endef
 
+define DO_GAME_CXX
+$(echo_cmd) "GAME_CXX $<"
+$(Q)$(CXX) $(BASEGAME_CFLAGS) -DGAMEDLL -DQAGAME $(SHLIBCFLAGS) $(CFLAGS) $(OPTIMIZEVM) -std=c++11 -I$(CURDIR)/code/llama.cpp/include -I$(CURDIR)/code/llama.cpp/ggml/include -o $@ -c $<
+endef
+
 define DO_CGAME_CC
 $(echo_cmd) "CGAME_CC $<"
 $(Q)$(CC) $(BASEGAME_CFLAGS) -DCGAMEDLL -DCGAME $(SHLIBCFLAGS) $(CFLAGS) $(OPTIMIZEVM) -o $@ -c $<
@@ -2668,6 +2673,10 @@ Q3GOBJ_ = \
   $(B)/$(BASEGAME)/game/ai_cast_survival.o \
   $(B)/$(BASEGAME)/game/ai_cast_sight.o \
   $(B)/$(BASEGAME)/game/ai_cast_think.o \
+  $(B)/$(BASEGAME)/game/ai_llm.o \
+  $(B)/$(BASEGAME)/game/ai_tactical_memory.o \
+  $(B)/$(BASEGAME)/game/ai_squad.o \
+  $(B)/$(BASEGAME)/game/ai_strategy.o \
   $(B)/$(BASEGAME)/game/ai_chat.o \
   $(B)/$(BASEGAME)/game/ai_cmd.o \
   $(B)/$(BASEGAME)/game/ai_dmnet.o \
@@ -2716,11 +2725,11 @@ Q3GVMOBJ = $(Q3GOBJ_:%.o=%.asm)
 ifdef MINGW
 $(B)/$(BASEGAME)/qagame_sp_$(SHLIBNAME): $(Q3GOBJ)
 	$(echo_cmd) "LD $@"
-	$(Q)$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3GOBJ) $(LIBS)
+	$(Q)$(CXX) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3GOBJ) $(LIBS) -L$(CURDIR)/code/llama.cpp/build/bin -lllama -lggml -lggml-base -lggml-cpu -lggml-vulkan -lpthread -lstdc++ -lvulkan
 else
 $(B)/$(BASEGAME)/qagame.sp.$(SHLIBNAME): $(Q3GOBJ)
 	$(echo_cmd) "LD $@"
-	$(Q)$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3GOBJ) $(LIBS)
+	$(Q)$(CXX) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3GOBJ) $(LIBS) -L$(CURDIR)/code/llama.cpp/build/bin -lllama -lggml -lggml-base -lggml-cpu -lggml-vulkan -lpthread -lstdc++ -lvulkan
 endif
 $(B)/$(BASEGAME)/vm/qagame.sp.qvm: $(Q3GVMOBJ) $(GDIR)/g_syscalls.asm $(Q3ASM)
 	$(echo_cmd) "Q3ASM $@"
@@ -2994,6 +3003,9 @@ $(B)/$(BASEGAME)/cgame/%.asm: $(CGDIR)/%.c $(Q3LCC)
 $(B)/$(BASEGAME)/game/%.o: $(GDIR)/%.c
 	$(DO_GAME_CC)
 
+$(B)/$(BASEGAME)/game/%.o: $(GDIR)/%.cpp
+	$(DO_GAME_CXX)
+
 $(B)/$(BASEGAME)/game/%.asm: $(GDIR)/%.c $(Q3LCC)
 	$(DO_GAME_Q3LCC)
 
@@ -3055,6 +3067,67 @@ OBJ = $(Q3OBJ) $(Q3ROBJ) $(Q3R2OBJ) $(Q3DOBJ) $(JPGOBJ) $(FTOBJ) \
 TOOLSOBJ = $(LBURGOBJ) $(Q3CPPOBJ) $(Q3RCCOBJ) $(Q3LCCOBJ) $(Q3ASMOBJ)
 STRINGOBJ = $(Q3R2STRINGOBJ)
 
+
+install-steam: release
+	@echo "Installing to Steam directory..."
+	@STEAMDIR="$(HOME)/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/RealRTCW"; \
+	if [ ! -d "$$STEAMDIR" ]; then \
+		echo "Error: Steam directory not found at $$STEAMDIR"; \
+		exit 1; \
+	fi; \
+	echo "Installing executable..."; \
+	cp -v $(BR)/$(CLIENTBIN)$(FULLBINEXT) "$$STEAMDIR/$(CLIENTBIN)$(FULLBINEXT)"; \
+	echo "Creating launch scripts with LLM library support..."; \
+	echo '#!/bin/bash' > "$$STEAMDIR/RealRTCW.sh"; \
+	echo '# Steam launcher for RealRTCW native Linux version with LLM support' >> "$$STEAMDIR/RealRTCW.sh"; \
+	echo '' >> "$$STEAMDIR/RealRTCW.sh"; \
+	echo 'cd "$$(dirname "$$0")"' >> "$$STEAMDIR/RealRTCW.sh"; \
+	echo '# Add current directory and Main to library path for LLM libraries' >> "$$STEAMDIR/RealRTCW.sh"; \
+	echo 'export LD_LIBRARY_PATH=".:Main:$$LD_LIBRARY_PATH"' >> "$$STEAMDIR/RealRTCW.sh"; \
+	echo 'exec ./RealRTCW.x86_64 "$$@"' >> "$$STEAMDIR/RealRTCW.sh"; \
+	chmod +x "$$STEAMDIR/RealRTCW.sh"; \
+	echo '#!/bin/bash' > "$$STEAMDIR/start_native.sh"; \
+	echo '# Native Linux launcher for RealRTCW via Steam with LLM support' >> "$$STEAMDIR/start_native.sh"; \
+	echo '' >> "$$STEAMDIR/start_native.sh"; \
+	echo 'GAME_DIR="$$(cd "$$(dirname "$$0")" && pwd)"' >> "$$STEAMDIR/start_native.sh"; \
+	echo 'cd "$$GAME_DIR"' >> "$$STEAMDIR/start_native.sh"; \
+	echo '' >> "$$STEAMDIR/start_native.sh"; \
+	echo '# Add library paths for LLM libraries' >> "$$STEAMDIR/start_native.sh"; \
+	echo 'export LD_LIBRARY_PATH=".:Main:$$LD_LIBRARY_PATH"' >> "$$STEAMDIR/start_native.sh"; \
+	echo '' >> "$$STEAMDIR/start_native.sh"; \
+	echo '# Launch the native Linux version' >> "$$STEAMDIR/start_native.sh"; \
+	echo 'exec ./RealRTCW.x86_64 "$$@"' >> "$$STEAMDIR/start_native.sh"; \
+	chmod +x "$$STEAMDIR/start_native.sh"; \
+	echo "Installing renderer..."; \
+	cp -v $(BR)/renderer_sp_opengl1_$(SHLIBNAME) "$$STEAMDIR/renderer_sp_opengl1_$(SHLIBNAME)"; \
+	echo "Installing game modules..."; \
+	cp -v $(BR)/$(BASEGAME)/cgame.sp.$(SHLIBNAME) "$$STEAMDIR/Main/cgame.sp.$(SHLIBNAME)"; \
+	cp -v $(BR)/$(BASEGAME)/qagame.sp.$(SHLIBNAME) "$$STEAMDIR/Main/qagame.sp.$(SHLIBNAME)"; \
+	cp -v $(BR)/$(BASEGAME)/ui.sp.$(SHLIBNAME) "$$STEAMDIR/Main/ui.sp.$(SHLIBNAME)"; \
+	echo "Installing LLM libraries..."; \
+	if [ -f "$(CURDIR)/code/llama.cpp/build/bin/libllama.so" ]; then \
+		cp -v $(CURDIR)/code/llama.cpp/build/bin/libllama.so* "$$STEAMDIR/"; \
+		cp -v $(CURDIR)/code/llama.cpp/build/bin/libggml.so* "$$STEAMDIR/"; \
+		cp -v $(CURDIR)/code/llama.cpp/build/bin/libggml-base.so* "$$STEAMDIR/"; \
+		cp -v $(CURDIR)/code/llama.cpp/build/bin/libggml-cpu.so* "$$STEAMDIR/"; \
+		if [ -f "$(CURDIR)/code/llama.cpp/build/bin/libggml-vulkan.so" ]; then \
+			cp -v $(CURDIR)/code/llama.cpp/build/bin/libggml-vulkan.so* "$$STEAMDIR/"; \
+			echo "GPU (Vulkan) support enabled"; \
+		fi; \
+		echo "Installing LLM libraries to Main directory..."; \
+		cp -v $(CURDIR)/code/llama.cpp/build/bin/libllama.so* "$$STEAMDIR/Main/"; \
+		cp -v $(CURDIR)/code/llama.cpp/build/bin/libggml.so* "$$STEAMDIR/Main/"; \
+		cp -v $(CURDIR)/code/llama.cpp/build/bin/libggml-base.so* "$$STEAMDIR/Main/"; \
+		cp -v $(CURDIR)/code/llama.cpp/build/bin/libggml-cpu.so* "$$STEAMDIR/Main/"; \
+		if [ -f "$(CURDIR)/code/llama.cpp/build/bin/libggml-vulkan.so" ]; then \
+			cp -v $(CURDIR)/code/llama.cpp/build/bin/libggml-vulkan.so* "$$STEAMDIR/Main/"; \
+			echo "GPU (Vulkan) libraries installed to Main"; \
+		fi; \
+		echo "LLM libraries installed."; \
+	else \
+		echo "Warning: LLM libraries not found, skipping..."; \
+	fi; \
+	echo "Installation complete!"
 
 copyfiles: release
 	@if [ ! -d $(COPYDIR)/$(BASEGAME) ]; then echo "You need to set COPYDIR to where your RTCW data is!"; fi
@@ -3135,7 +3208,7 @@ ifneq ($(B),)
 endif
 
 .PHONY: all clean clean2 clean-debug clean-release copyfiles \
-	debug default dist distclean makedirs \
+	debug default dist distclean install-steam makedirs \
 	release targets \
 	toolsclean toolsclean2 toolsclean-debug toolsclean-release \
 	$(OBJ_D_FILES) $(TOOLSOBJ_D_FILES)

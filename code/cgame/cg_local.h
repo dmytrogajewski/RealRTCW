@@ -74,7 +74,7 @@ If you have questions concerning this license or the applicable additional terms
 #define MAX_STEP_CHANGE     32
 
 #define MAX_VERTS_ON_POLY   64
-#define MAX_MARK_POLYS      1024
+#define MAX_MARK_POLYS      8192  // Increased from 1024 to allow more permanent bullet holes
 
 #define STAT_MINUS          10  // num frame for '-' stats digit
 
