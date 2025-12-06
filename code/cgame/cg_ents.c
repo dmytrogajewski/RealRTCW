@@ -192,7 +192,6 @@ void CG_LoseArmor( centity_t *cent, int index ) {
 							"tag_calfleft",
 							"tag_calfright"};
 
-	clientInfo_t *ci;
 	// TTimo: bunch of inits
 	int totalparts = 0, dynamicparts = 0, protoParts = 9, superParts = 16, heinrichParts = 22;
 	char        **tags = NULL;
@@ -200,7 +199,6 @@ void CG_LoseArmor( centity_t *cent, int index ) {
 	qhandle_t sound = 0;    //----(SA)	added
 	int dmgbits = 16;         // 32/2;
 	int clientNum;
-	int tagIndex;
 	vec3_t origin, velocity, dir;
 
 
@@ -243,7 +241,6 @@ void CG_LoseArmor( centity_t *cent, int index ) {
 	if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {
 		CG_Error( "Bad clientNum on player entity" );
 	}
-	ci = &cgs.clientinfo[ clientNum ];
 
 	// check if the model for the damaged part to fling is there
 	if ( cent->currentState.dmgFlags & ( 1 << ( index + dynamicparts ) ) ) {
@@ -254,7 +251,7 @@ void CG_LoseArmor( centity_t *cent, int index ) {
 		return;
 	}
 
-	tagIndex = CG_GetOriginForTag( cent, &cent->pe.torsoRefEnt, tags[index], 0, origin, NULL );
+	(void)CG_GetOriginForTag( cent, &cent->pe.torsoRefEnt, tags[index], 0, origin, NULL );
 
 	// calculate direction vector based on player center->tag position
 	VectorSubtract( origin, cent->currentState.origin, dir );
@@ -1262,7 +1259,6 @@ static void CG_Missile( centity_t *cent ) {
 				if ( flytime > 300 ) {
 					// have a quick fade in so we don't have a pop
 					vec3_t velocity;
-					int volume = flytime > 375 ? 255 : ( 75.f / ( (float)flytime - 300.f ) ) * 255;
 
 		    BG_EvaluateTrajectoryDelta( &cent->currentState.pos, cg.time, velocity, qfalse, -1 );
 		    CG_S_AddLoopingSound( cent->currentState.number, cent->lerpOrigin, velocity, weapon->missileSound, 0 );
@@ -1646,7 +1642,7 @@ static void CG_Efx( centity_t *cent ) {
 
 		for ( i = 0; i < MAX_TESLA_BOLTS; i++ ) {
 
-			if ( cent->boltCrawlDirs[0] || cent->boltCrawlDirs[1] || cent->boltCrawlDirs[2] ) {
+			if ( VectorLength( cent->boltCrawlDirs[0] ) || VectorLength( cent->boltCrawlDirs[1] ) || VectorLength( cent->boltCrawlDirs[2] ) ) {
 				VectorMA( cent->boltLocs[i], cent->boltTimes[i] - cg.time, cent->boltCrawlDirs[i], perpvec );
 			} else {
 				VectorCopy( cent->boltLocs[i], perpvec );

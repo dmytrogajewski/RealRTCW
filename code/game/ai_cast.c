@@ -214,9 +214,14 @@ int AICast_ShutdownClient( int client ) {
 //	botai_import.DebugLineDelete(bs->debugline);
 #endif //DEBUG
 
-	trap_BotFreeMoveState( bs->ms );
+	// Only free move/goal states if they were allocated (handle > 0)
+	if ( bs->ms > 0 ) {
+		trap_BotFreeMoveState( bs->ms );
+	}
 	//free the goal state
-	trap_BotFreeGoalState( bs->gs );
+	if ( bs->gs > 0 ) {
+		trap_BotFreeGoalState( bs->gs );
+	}
 	//
 	//clear the bot state
 	memset( bs, 0, sizeof( bot_state_t ) );

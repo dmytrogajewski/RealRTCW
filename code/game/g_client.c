@@ -1599,8 +1599,24 @@ void G_RetrieveMoveSpeedsFromClient( int entnum, char *text ) {
 			break;
 		}
 
+		// skip invalid animation names (e.g., numeric-only strings from corrupted data)
+		if ( token[0] >= '0' && token[0] <= '9' ) {
+			G_Printf( "G_RetrieveMoveSpeedsFromClient: skipping invalid animation name '%s' for model '%s'\n", token, modelInfo->modelname );
+			// skip the movespeed and stepgap that follow
+			COM_Parse( &text_p );
+			COM_Parse( &text_p );
+			continue;
+		}
+
 		// this is a name
 		anim = BG_AnimationForString( token, modelInfo );
+		if ( !anim ) {
+			G_Printf( "G_RetrieveMoveSpeedsFromClient: unknown animation '%s' for model '%s'\n", token, modelInfo->modelname );
+			// skip the movespeed and stepgap that follow
+			COM_Parse( &text_p );
+			COM_Parse( &text_p );
+			continue;
+		}
 		if ( anim->moveSpeed == 0 ) {
 			G_Error( "G_RetrieveMoveSpeedsFromClient: trying to set movespeed for non-moving animation" );
 		}

@@ -151,7 +151,9 @@ qboolean AICast_ScriptAction_GotoMarker( cast_state_t *cs, char *params ) {
 					if ( !ent ) {
 						ent = AICast_FindEntityForName( token );
 						if ( !ent ) {
-							G_Error( "AI Scripting: gotomarker cannot find targetname \"%s\"\n", token );
+							G_Printf( "^3WARNING: AI Scripting: gotomarker cannot find targetname \"%s\", skipping fire target\n", token );
+							AICast_NoAttackIfNotHurtSinceLastScriptAction( cs );
+							return qfalse;
 						}
 					}
 					// set the view angle manually
@@ -205,7 +207,8 @@ qboolean AICast_ScriptAction_GotoMarker( cast_state_t *cs, char *params ) {
 	}
 
 	if ( !ent ) {
-		G_Error( "AI Scripting: gotomarker can't find ai_marker with \"targetname\" = \"%s\"\n", token );
+		G_Printf( "^3WARNING: AI Scripting: gotomarker can't find ai_marker with \"targetname\" = \"%s\", skipping action\n", token );
+		return qtrue;  // Skip this action instead of crashing
 	}
 
 	if ( Distance( cs->bs->origin, ent->r.currentOrigin ) < SCRIPT_REACHGOAL_DIST ) { // we made it
@@ -335,7 +338,9 @@ qboolean AICast_ScriptAction_GotoCast( cast_state_t *cs, char *params ) {
 					if ( !ent ) {
 						ent = AICast_FindEntityForName( token );
 						if ( !ent ) {
-							G_Error( "AI Scripting: gotocast cannot find targetname \"%s\"\n", token );
+							G_Printf( "^3WARNING: AI Scripting: gotocast cannot find targetname \"%s\", skipping fire target\n", token );
+							AICast_NoAttackIfNotHurtSinceLastScriptAction( cs );
+							return qfalse;
 						}
 					}
 
@@ -383,15 +388,12 @@ qboolean AICast_ScriptAction_GotoCast( cast_state_t *cs, char *params ) {
 	// find the cast/player with the given "name"
 	ent = AICast_FindEntityForName( token );
 	if ( !ent ) {
-		G_Error( "AI Scripting: gotocast can't find AI cast with \"ainame\" = \"%s\"\n", token );
+		G_Printf( "^3WARNING: AI Scripting: gotocast can't find AI cast with \"ainame\" = \"%s\", skipping action\n", token );
+		return qtrue;  // Skip this action instead of crashing
 	}
 
 	if ( Distance( cs->bs->origin, ent->r.currentOrigin ) < SCRIPT_REACHCAST_DIST ) { // we made it
 		return qtrue;
-	}
-
-	if ( !ent ) {
-		G_Error( "AI Scripting: gotocast can't find ai_marker with \"targetname\" = \"%s\"\n", token );
 	}
 
 	cs->castScriptStatus.scriptNoMoveTime = 0;
@@ -592,14 +594,16 @@ qboolean AICast_ScriptAction_Wait( cast_state_t *cs, char *params ) {
 		if ( !ent ) {
 			ent = AICast_FindEntityForName( facetarget );
 			if ( !ent ) {
-				G_Error( "AI Scripting: wait cannot find targetname \"%s\"\n", token );
+				G_Printf( "^3WARNING: AI Scripting: wait cannot find targetname \"%s\", skipping face target\n", facetarget );
 			}
 		}
-		// set the view angle manually
-		BG_EvaluateTrajectory( &ent->s.pos, level.time, org );
-		VectorSubtract( org, cs->bs->origin, vec );
-		VectorNormalize( vec );
-		vectoangles( vec, cs->ideal_viewangles );
+		// set the view angle manually (only if we found the target)
+		if ( ent ) {
+			BG_EvaluateTrajectory( &ent->s.pos, level.time, org );
+			VectorSubtract( org, cs->bs->origin, vec );
+			VectorNormalize( vec );
+			vectoangles( vec, cs->ideal_viewangles );
+		}
 	}
 
 	return ( cs->castScriptStatus.castScriptStackChangeTime + duration < level.time );
@@ -666,7 +670,8 @@ qboolean AICast_ScriptAction_FollowCast( cast_state_t *cs, char *params ) {
 	// find the cast/player with the given "name"
 	ent = AICast_FindEntityForName( params );
 	if ( !ent ) {
-		G_Error( "AI Scripting: followcast can't find AI cast with \"ainame\" = \"%s\"\n", params );
+		G_Printf( "^3WARNING: AI Scripting: followcast can't find AI cast with \"ainame\" = \"%s\", skipping action\n", params );
+		return qtrue;  // Skip this action instead of crashing
 	}
 
 	AIFunc_ChaseGoalStart( cs, ent->s.number, 64, qtrue );
@@ -839,7 +844,9 @@ qboolean AICast_ScriptAction_Attack( cast_state_t *cs, char *params ) {
 	if ( params ) {
 		ent = AICast_FindEntityForName( params );
 		if ( !ent ) {
-			G_Error( "AI Scripting: \"attack\" command unable to find aiName \"%s\"", params );
+			G_Printf( "^3WARNING: AI Scripting: \"attack\" command unable to find aiName \"%s\", skipping\n", params );
+			cs->castScriptStatus.scriptAttackEnt = -1;
+			return qtrue;  // Skip this action instead of crashing
 		}
 		cs->castScriptStatus.scriptAttackEnt = ent->s.number;
 		cs->enemyNum = ent->s.number;
@@ -920,15 +927,17 @@ qboolean AICast_ScriptAction_PlayAnim( cast_state_t *cs, char *params ) {
 				if ( !ent ) {
 					ent = AICast_FindEntityForName( token );
 					if ( !ent ) {
-						G_Error( "AI Scripting: playanim cannot find targetname \"%s\"\n", token );
+						G_Printf( "^3WARNING: AI Scripting: playanim cannot find targetname \"%s\", skipping face target\n", token );
 					}
 				}
-				// set the view angle manually
-				BG_EvaluateTrajectory( &ent->s.pos, level.time, org );
-				VectorSubtract( org, cs->bs->origin, vec );
-				VectorNormalize( vec );
-				vectoangles( vec, cs->ideal_viewangles );
-				VectorCopy( cs->ideal_viewangles, cs->castScriptStatus.playanim_viewangles );
+				// set the view angle manually (only if we found the target)
+				if ( ent ) {
+					BG_EvaluateTrajectory( &ent->s.pos, level.time, org );
+					VectorSubtract( org, cs->bs->origin, vec );
+					VectorNormalize( vec );
+					vectoangles( vec, cs->ideal_viewangles );
+					VectorCopy( cs->ideal_viewangles, cs->castScriptStatus.playanim_viewangles );
+				}
 			}
 
 		} else {
@@ -1543,13 +1552,15 @@ qboolean AICast_ScriptAction_IncreaseRespawns(cast_state_t *cs, char *params) {
     // Find the target entity by AI name
     targetEnt = AICast_FindEntityForName(aiName);
     if (!targetEnt || !targetEnt->client) {
-        G_Error("AI Scripting: increaserespawns could not find AI with name '%s'\n", aiName);
+        G_Printf("^3WARNING: AI Scripting: increaserespawns could not find AI with name '%s', skipping action\n", aiName);
+        return qtrue;
     }
 
     // Get the cast state of the target entity
     targetCs = AICast_GetCastState(targetEnt->s.clientNum);
     if (!targetCs) {
-        G_Error("AI Scripting: increaserespawns could not get cast state for AI '%s'\n", aiName);
+        G_Printf("^3WARNING: AI Scripting: increaserespawns could not get cast state for AI '%s', skipping action\n", aiName);
+        return qtrue;
     }
 
     // Increase the respawnsleft value
@@ -2489,7 +2500,8 @@ qboolean AICast_ScriptAction_FireAtTarget( cast_state_t *cs, char *params ) {
 	if ( !ent ) {
 		ent = AICast_FindEntityForName( token );
 		if ( !ent ) {
-			G_Error( "AI Scripting: fireattarget cannot find targetname/aiName \"%s\"\n", token );
+			G_Printf( "^3WARNING: AI Scripting: fireattarget cannot find targetname/aiName \"%s\", skipping action\n", token );
+			return qtrue;
 		}
 	}
 
@@ -2579,7 +2591,7 @@ qboolean AICast_ScriptAction_DropWeapon(cast_state_t* cs, char* params) {
 	// find the cast/player with the given "name"
 	ent = AICast_FindEntityForName(params);
 	if (!ent) {
-		G_Error("AI Scripting: can't find AI cast with \"ainame\" = \"%s\"\n", params);
+		G_Printf("^3WARNING: AI Scripting: can't find AI cast with \"ainame\" = \"%s\", skipping action\n", params);
 		return qtrue;
 	}
 	weapon = cs->weaponNum;
@@ -3121,7 +3133,8 @@ qboolean AICast_ScriptAction_SpawnCast( cast_state_t *cs, char *params ) {
 
 	targetEnt = G_Find( NULL, FOFS(targetname), token );
 	if (!targetEnt) {
-		G_Error( "AI Scripting: cannot find targetname \"%s\"\n", token );
+		G_Printf( "^3WARNING: AI Scripting: spawncast cannot find targetname \"%s\", skipping spawn\n", token );
+		return qtrue;
 	}
 
 	token = COM_ParseExt( &pString, qfalse );
@@ -3547,7 +3560,8 @@ qboolean AICast_ScriptAction_FaceTargetAngles( cast_state_t *cs, char *params ) 
 
 	targetEnt = G_Find( NULL, FOFS( targetname ), params );
 	if ( !targetEnt ) {
-		G_Error( "AI Scripting: facetargetangles cannot find targetname \"%s\"\n", params );
+		G_Printf( "^3WARNING: AI Scripting: facetargetangles cannot find targetname \"%s\", skipping action\n", params );
+		return qtrue;
 	}
 
 	VectorCopy( targetEnt->s.angles, cs->ideal_viewangles );
@@ -3577,14 +3591,15 @@ qboolean AICast_ScriptAction_FaceEntity ( cast_state_t *cs, char *params ) {
 	if ( !ent ) {
 		ent = AICast_FindEntityForName( params );
 		if ( !ent ) {
-			G_Error( "AI Scripting: wait cannot find targetname \"%s\"\n", params );
-		    }
+			G_Printf( "^3WARNING: AI Scripting: face_entity cannot find targetname \"%s\", skipping action\n", params );
+			return qtrue;
 		}
-		// set the view angle manually
-		BG_EvaluateTrajectory( &ent->s.pos, level.time, org );
-		VectorSubtract( org, cs->bs->origin, vec );
-		VectorNormalize( vec );
-		vectoangles( vec, cs->ideal_viewangles );
+	}
+	// set the view angle manually
+	BG_EvaluateTrajectory( &ent->s.pos, level.time, org );
+	VectorSubtract( org, cs->bs->origin, vec );
+	VectorNormalize( vec );
+	vectoangles( vec, cs->ideal_viewangles );
 
 	return qtrue;
 }
@@ -3652,7 +3667,8 @@ qboolean AICast_ScriptAction_Mount( cast_state_t *cs, char *params ) {
 
 	targetEnt = G_Find( NULL, FOFS( targetname ), params );
 	if ( !targetEnt ) {
-		G_Error( "AI Scripting: mount cannot find targetname \"%s\"\n", params );
+		G_Printf( "^3WARNING: AI Scripting: mount cannot find targetname \"%s\", skipping action\n", params );
+		return qtrue;
 	}
 
 	VectorSubtract( targetEnt->r.currentOrigin, cs->bs->origin, vec );
@@ -3745,7 +3761,8 @@ qboolean AICast_ScriptAction_Teleport( cast_state_t *cs, char *params ) {
 
 	dest =  G_PickTarget( params );
 	if ( !dest ) {
-		G_Error( "AI Scripting: couldn't find teleporter destination: '%s'\n", params );
+		G_Printf( "^3WARNING: AI Scripting: couldn't find teleporter destination: '%s', skipping action\n", params );
+		return qtrue;
 	}
 
 	TeleportPlayer( &g_entities[cs->entityNum], dest->s.origin, dest->s.angles );

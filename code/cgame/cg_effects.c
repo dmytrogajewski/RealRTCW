@@ -336,6 +336,16 @@ void CG_Bleed( vec3_t origin, int entityNum ) {
 		return;     // too dangerous, since we call playerangles() in here, which calls the animation system, which might not be setup yet
 	}
 
+	// Validate entityNum is in range
+	if ( entityNum < 0 || entityNum >= MAX_GENTITIES ) {
+		return;
+	}
+
+	// Make sure we have a valid snapshot
+	if ( !cg.snap ) {
+		return;
+	}
+
 	cent = &cg_entities[entityNum];
 
 	if ( cent->currentState.aiChar == AICHAR_ZOMBIE || cent->currentState.aiChar == AICHAR_ZOMBIE_SURV 
@@ -631,7 +641,14 @@ int CG_GetOriginForTag( centity_t *cent, refEntity_t *parent, char *tagName, int
 
 	if ( axis ) {
 		// had to cast away the const to avoid compiler problems...
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
 		MatrixMultiply( lerped.axis, ( (refEntity_t *)parent )->axis, axis );
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 	}
 
 	return retval;

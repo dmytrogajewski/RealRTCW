@@ -458,6 +458,7 @@ int PC_ReadDefineParms( source_t *source, define_t *define, token_t **parms, int
 //============================================================================
 int PC_StringizeTokens( token_t *tokens, token_t *token ) {
 	token_t *t;
+	size_t len, remaining;
 
 	token->type = TT_STRING;
 	token->whitespace_p = NULL;
@@ -466,9 +467,17 @@ int PC_StringizeTokens( token_t *tokens, token_t *token ) {
 	strcat( token->string, "\"" );
 	for ( t = tokens; t; t = t->next )
 	{
-		strncat( token->string, t->string, MAX_TOKEN - strlen( token->string ) - 1 );
+		len = strlen( token->string );
+		remaining = MAX_TOKEN - len - 1;
+		if ( remaining > 0 ) {
+			strncat( token->string, t->string, remaining );
+		}
 	} //end for
-	strncat( token->string, "\"", MAX_TOKEN - strlen( token->string ) - 1 );
+	len = strlen( token->string );
+	remaining = MAX_TOKEN - len - 1;
+	if ( remaining > 0 ) {
+		strncat( token->string, "\"", remaining );
+	}
 	return qtrue;
 } //end of the function PC_StringizeTokens
 //============================================================================

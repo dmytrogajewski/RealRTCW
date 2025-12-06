@@ -4937,5 +4937,5 @@ void CL_OpenURL( const char *url ) {
 		Com_Printf(  "invalid/empty URL\n" );
 		return;
 	}
-	Sys_OpenURL( url, qfalse );
+	Sys_OpenURL( (char *)url, qfalse );
 }

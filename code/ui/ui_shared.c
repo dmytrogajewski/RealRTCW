@@ -3438,7 +3438,7 @@ void Item_Text_Wrapped_Paint( itemDef_t *item ) {
 
 void Item_Text_Paint( itemDef_t *item ) {
 	char text[1024];
-	char infostring[SAVE_INFOSTRING_LENGTH];
+	static char infostring[SAVE_INFOSTRING_LENGTH];
 	const char *textPtr;
 	int height, width;
 	vec4_t color;

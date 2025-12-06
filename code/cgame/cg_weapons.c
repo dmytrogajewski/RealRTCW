@@ -181,6 +181,10 @@ static void CG_MachineGunEjectBrass( centity_t *cent ) {
 		return;
 	}
 
+	if ( !cg.snap ) {
+		return;
+	}
+
 	if ( !( cg.snap->ps.persistant[PERS_HWEAPON_USE] ) && ( cent->currentState.clientNum == cg.snap->ps.clientNum ) ) {
 		CG_MachineGunEjectBrassNew( cent );
 		return;
@@ -370,6 +374,10 @@ static void CG_ShotgunEjectBrass( centity_t *cent ) {
 		return;
 	}
 
+	if ( !cg.snap ) {
+		return;
+	}
+
 	if ( !( cg.snap->ps.persistant[PERS_HWEAPON_USE] ) && ( cent->currentState.clientNum == cg.snap->ps.clientNum ) ) {
 		CG_ShotgunEjectBrassNew( cent );
 		return;
@@ -556,6 +564,10 @@ static void CG_PistolEjectBrass( centity_t *cent ) {
 	vec3_t v[3];
 
 	if ( cg_brassTime.integer <= 0 ) {
+		return;
+	}
+
+	if ( !cg.snap ) {
 		return;
 	}
 
@@ -1285,7 +1297,7 @@ static qboolean CG_ParseWeaponConfig( const char *filename, weaponInfo_t *wi ) {
 }
 
 
-static qboolean CG_RW_ParseError( int handle, char *format, ... ) {
+static qboolean __attribute__((format(printf, 2, 3))) CG_RW_ParseError( int handle, char *format, ... ) {
 	int line;
 	char filename[128];
 	va_list argptr;
@@ -6653,6 +6665,11 @@ void CG_Bullet( vec3_t end, int sourceEntityNum, vec3_t normal, qboolean flesh, 
 	vec3_t dir;
 	vec3_t start, trend, tmp;      // JPW
 	static int lastBloodSpat;
+
+	// Validate snapshot is available
+	if ( !cg.snap ) {
+		return;
+	}
 
 	// if the shooter is currently valid, calc a source point and possibly
 	// do trail effects

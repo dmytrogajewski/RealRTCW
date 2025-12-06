@@ -2141,6 +2141,9 @@ void AICast_CheckDangerousEntity( gentity_t *ent, int dangerFlags, float dangerD
 		if ( cs->castScriptStatus.scriptNoSightTime >= level.time ) {
 			continue;       // absolutely no sight (or hear) information allowed
 		}
+		if ( cs->aiFlags & AIFL_EXPLICIT_ROUTING ) {
+			continue;       // doing explicit scripted routing, don't interrupt with danger avoidance
+		}
 		if ( !hurtFriendly && ent->s.number < MAX_CLIENTS && AICast_SameTeam( cs, ent->s.number ) ) {
 			continue;   // trust that friends will not hurt us
 		}

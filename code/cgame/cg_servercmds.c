@@ -556,6 +556,11 @@ void CG_SendMoveSpeed( animation_t *animList, int numAnims, char *modelName ) {
 			continue;
 		}
 
+		// skip animations with empty names to prevent parsing errors
+		if ( !anim->name[0] ) {
+			continue;
+		}
+
 		// add this to the list
 		Q_strcat( text, sizeof( text ), va( " %s %i %.1f", anim->name, anim->moveSpeed, anim->stepGap ) );
 	}

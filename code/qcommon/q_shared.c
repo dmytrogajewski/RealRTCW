@@ -172,7 +172,7 @@ COM_StripFilename
 */
 void COM_StripFilename( char *in, char *out ) {
 	char *end;
-	Q_strncpyz( out, in, strlen( in ) );
+	Q_strncpyz( out, in, MAX_QPATH );
 	end = COM_SkipPath( out );
 	*end = 0;
 }

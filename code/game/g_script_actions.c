@@ -111,7 +111,8 @@ qboolean G_ScriptAction_GotoMarker( gentity_t *ent, char *params ) {
 		target = G_Find( NULL, FOFS( targetname ), token );
 
 		if ( !target ) {
-			G_Error( "G_Scripting: gotomarker can't find entity with \"targetname\" = \"%s\"\n", token );
+			G_Printf( "^3WARNING: G_Scripting: gotomarker can't find entity with \"targetname\" = \"%s\", skipping action\n", token );
+			return qtrue;
 		}
 
 		VectorSubtract( target->r.currentOrigin, ent->r.currentOrigin, vec );
@@ -342,7 +343,8 @@ qboolean G_ScriptAction_FollowSpline( gentity_t* ent, char *params ) {
 		}
 
 		if ( !( pSpline = BG_Find_Spline( token ) ) ) {
-			G_Error( "G_Scripting: can't find spline with \"targetname\" = \"%s\"\n", token );
+			G_Printf( "^3WARNING: G_Scripting: can't find spline with \"targetname\" = \"%s\", skipping action\n", token );
+			return qtrue;
 		}
 
 		token = COM_ParseExt( &pString, qfalse );

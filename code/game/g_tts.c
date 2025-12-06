@@ -175,7 +175,7 @@ static qboolean TTS_ParseWAV( const byte *wav_data, int wav_size, tts_audio_buff
 		
 		if ( memcmp( chunk_id, "fmt ", 4 ) == 0 ) {
 			if ( chunk_size >= 16 && p + chunk_size <= end ) {
-				int audio_format = *(short*)( p + 0 );
+				(void)*(short*)( p + 0 ); // audio_format - unused but parsed
 				channels = *(short*)( p + 2 );
 				sample_rate = *(int*)( p + 4 );
 				bits_per_sample = *(short*)( p + 14 );
@@ -617,7 +617,6 @@ TTS_Init
 */
 qboolean TTS_Init( void ) {
 	char piper_path[MAX_QPATH];
-	fileHandle_t f;
 	
 	G_Printf( "[TTS] TTS_Init called\n" );
 	
@@ -872,7 +871,7 @@ static void TTS_ProcessCompletedRequests( void ) {
 		if ( req->ready && req->audio ) {
 			// Request completed - audio is ready
 			// Validate text is not NULL or empty before processing
-			if ( !req->text || !req->text[0] ) {
+			if ( !req->text[0] ) {
 				G_Printf( "^3[TTS] ERROR: Completed request has NULL or empty text, skipping registration\n" );
 				TTS_FreeAudioBuffer( req->audio );
 				req->audio = NULL;

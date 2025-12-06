@@ -604,8 +604,7 @@ void AICast_Think( int client, float thinktime ) {
 				ent->client->ps.eFlags &= ~EF_FORCE_END_FRAME;
 				ent->client->ps.eFlags |= EF_NO_TURN_ANIM;
 
-				// Clear AI script state to prevent executing old script commands
-				memset( &cs->castScriptStatus, 0, sizeof( cs->castScriptStatus ) );
+				// Reset specific script navigation state (but NOT castScriptEventIndex - don't restart scripts)
 				cs->castScriptStatus.scriptGotoEnt = -1;
 				cs->castScriptStatus.scriptGotoId = -1;
 				cs->castScriptStatus.scriptAttackEnt = -1;
@@ -841,8 +840,8 @@ void AICast_Think( int client, float thinktime ) {
 	}
 	
 	//
-	// Squad Coordination
-	if ( cs->squadId >= 0 ) {
+	// Squad Coordination - skip for NPCs with scripts (they should follow scripts, not squad tactics)
+	if ( cs->squadId >= 0 && cs->numCastScriptEvents == 0 ) {
 		// Squad leaders think tactically
 		if ( cs->squadRole == SQUAD_ROLE_LEADER ) {
 			AICast_SquadLeaderThink( cs );
@@ -856,7 +855,8 @@ void AICast_Think( int client, float thinktime ) {
 	
 	//
 	// Tactical Response: React to enemy sightings by nearby squad members
-	if ( ent->aiTeam >= 0 && cs->squadId >= 0 ) {
+	// Skip for NPCs with scripts (they should follow scripts, not squad tactics)
+	if ( ent->aiTeam >= 0 && cs->squadId >= 0 && cs->numCastScriptEvents == 0 ) {
 		tactical_memory_t *tm = TacticalMemory_GetForTeam( ent->aiTeam );
 		if ( tm && tm->enemyCount > 0 ) {
 			// Check if we have an enemy in tactical memory that we haven't engaged yet
@@ -956,9 +956,13 @@ void AICast_Think( int client, float thinktime ) {
 			 !cs->llm_pendingStrategicRequest &&
 			 strategicInterval > 0 && 
 			 cs->llm_lastStrategicUpdateTime + strategicInterval < level.time ) {
+			// Skip NPCs with scripts - let their scripts control behavior, not LLM
+			if ( cs->numCastScriptEvents > 0 ) {
+				// Do not request LLM decisions for scripted NPCs
+			}
 			// Only request decisions for AI in combat or alert states with enemies
 			// Skip if entity is dead or not in use
-			if ( ent->health > 0 && ent->inuse && cs->aiState >= AISTATE_ALERT ) {
+			else if ( ent->health > 0 && ent->inuse && cs->aiState >= AISTATE_ALERT ) {
 				// Additional check: only request if has enemy or is actively engaged
 				if ( cs->enemyNum >= 0 || cs->aiState >= AISTATE_COMBAT ) {
 					// Check if queue has space (LLM_RequestStrategicDecision checks this too)
@@ -971,8 +975,8 @@ void AICast_Think( int client, float thinktime ) {
 			}
 		}
 		
-		// Check for completed strategic decisions
-		if ( cs->llm_pendingStrategicRequest ) {
+		// Check for completed strategic decisions - skip for NPCs with scripts
+		if ( cs->llm_pendingStrategicRequest && cs->numCastScriptEvents == 0 ) {
 			llm_decision_t decision;
 			if ( LLM_GetStrategicDecision( cs->entityNum, &decision ) ) {
 				cs->llm_pendingStrategicRequest = qfalse;

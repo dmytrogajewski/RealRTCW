@@ -1448,7 +1448,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		// TTS should be enabled by default (default value is "1" in CVAR table)
 		// Only force it to 1 if the CVAR string is empty (meaning it was never set)
 		// Don't override if user explicitly set it to 0
-		if ( g_tts_enable.integer == 0 && ( !g_tts_enable.string || !g_tts_enable.string[0] ) ) {
+		if ( g_tts_enable.integer == 0 && !g_tts_enable.string[0] ) {
 			G_Printf( "[TTS] g_tts_enable not set, using default: 1 (TTS enabled by default)\n" );
 			trap_Cvar_Set( "g_tts_enable", "1" );
 			trap_Cvar_Update( &g_tts_enable );

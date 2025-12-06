@@ -115,6 +115,13 @@ void AICast_AssignSquads(void) {
 			continue;
 		}
 		
+		// Skip NPCs with scripts - they should follow their scripts, not squad tactics
+		if (cs->numCastScriptEvents > 0) {
+			cs->squadId = -1;
+			cs->squadRole = SQUAD_ROLE_NONE;
+			continue;
+		}
+		
 		// Skip entities without valid team or with team >= 4
 		if (ent->aiTeam < 0 || ent->aiTeam >= 4) {
 			cs->squadId = -1;
@@ -379,6 +386,11 @@ void AICast_SquadLeaderThink(cast_state_t *cs) {
 		return;
 	}
 	
+	// Skip NPCs with scripts - let the script control behavior
+	if (cs->numCastScriptEvents > 0) {
+		return;
+	}
+	
 	squad = AICast_GetSquad(cs->entityNum);
 	if (!squad) {
 		return;
@@ -439,6 +451,11 @@ void AICast_SquadMemberExecute(cast_state_t *cs) {
 	float distToFormation;
 	
 	if (!cs || cs->squadRole == SQUAD_ROLE_LEADER || cs->squadLeaderNum < 0) {
+		return;
+	}
+	
+	// Skip NPCs with scripts - let the script control behavior
+	if (cs->numCastScriptEvents > 0) {
 		return;
 	}
 	

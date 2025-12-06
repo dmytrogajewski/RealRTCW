@@ -1001,7 +1001,7 @@ static void CG_LoadTranslationTextStrings(const char *file) {
 	int len, i;
 	char *token;
 
-	Com_sprintf(filename, MAX_QPATH, file);
+	Com_sprintf(filename, MAX_QPATH, "%s", file);
 	len = trap_FS_FOpenFile(filename, &f, FS_READ);
 	if (len <= 0) {
 		CG_Printf(S_COLOR_RED "WARNING: string translation file (main/%s)\n", filename);

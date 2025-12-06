@@ -61,10 +61,10 @@ static void dbgpipe(const char *fmt, ...)
                 fprintf(f, "%i", va_arg(args, unsigned int));
                 break;
             case 'c':
-                fprintf(f, "%c", va_arg(args, char));
+                fprintf(f, "%c", va_arg(args, int));
                 break;
             case 'f':
-                fprintf(f, "%f", va_arg(args, float));
+                fprintf(f, "%f", va_arg(args, double));
                 break;
             case 's':
                 fprintf(f, "%s", va_arg(args, const char *));
