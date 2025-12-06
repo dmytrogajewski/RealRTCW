@@ -1450,6 +1450,14 @@ static std::string LLM_Generate(const std::string &prompt, int maxTokens, qboole
 			break;
 		}
 		
+		// Stop if we see prompt leakage markers
+		if (result.find("===") != std::string::npos) {
+			// Strip the marker and stop
+			size_t pos = result.find("===");
+			result = result.substr(0, pos);
+			break;
+		}
+		
 		// Prepare next batch with single token
 		batch = llama_batch_get_one(&new_token, 1);
 		int token_decode_result = llama_decode(g_llm.ctx, batch);
@@ -1535,12 +1543,12 @@ static void LLM_WorkerThread() {
 			}
 			
 			if (request.type == REQUEST_STRATEGIC) {
-				output = LLM_Generate(request.prompt, 100, qtrue); // Increased from 10 to 100, require JSON
+				output = LLM_Generate(request.prompt, 2048, qtrue); // Increased to 512 to prevent truncation
 			} else if (request.type == REQUEST_DIALOGUE) {
 				// Dialogue needs enough tokens for complete JSON: {"dialogue": "...", "priority": N}
 				// Minimum ~30-40 tokens, use 100 to ensure completion even with longer German text
 				// Pass qtrue to requireCompleteJSON so generation continues until we get a closing brace
-				output = LLM_Generate(request.prompt, 200, qtrue); // Increased from 100 to 200
+				output = LLM_Generate(request.prompt, 2048, qtrue); // Increased to 512
 			}
 		} catch (...) {
 			// Catch any C++ exceptions to prevent crashes

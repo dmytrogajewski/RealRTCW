@@ -81,7 +81,7 @@ static tts_state_t tts_state;
 
 // Forward declarations
 static void* TTS_WorkerThread( void *arg );
-static qboolean TTS_SpawnPiper( const char *text, tts_audio_buffer_t **out_audio );
+static qboolean TTS_SpawnPiper( const char *text, const tts_voice_params_t *params, tts_audio_buffer_t **out_audio );
 static qboolean TTS_ParseWAV( const byte *wav_data, int wav_size, tts_audio_buffer_t **out_audio );
 static unsigned int TTS_HashText( const char *text, const tts_voice_params_t *params );
 static void TTS_ProcessCompletedRequests( void );
@@ -236,7 +236,7 @@ TTS_SpawnPiper
 Spawn Piper process and synthesize text using fork/exec with pipes
 ================
 */
-static qboolean TTS_SpawnPiper( const char *text, tts_audio_buffer_t **out_audio ) {
+static qboolean TTS_SpawnPiper( const char *text, const tts_voice_params_t *params, tts_audio_buffer_t **out_audio ) {
 	int stdin_pipe[2];
 	int stdout_pipe[2];
 	pid_t pid;
@@ -314,7 +314,22 @@ static qboolean TTS_SpawnPiper( const char *text, tts_audio_buffer_t **out_audio
 		}
 		
 		// Execute Piper
-		execl( piper_path, "piper", "-m", model_path, "-c", config_path, "-f", "-", NULL );
+		// Pass speaker ID based on shout param
+		// 4 = Neutral, 1 = Angry/Shout (based on Thorsten emotional model config)
+		const char *speaker_id = params && params->shout ? "1" : "4";
+		const char *length_scale = params && params->shout ? "0.75" : "1.0";
+		const char *noise_scale = params && params->shout ? "0.9" : "0.667";
+		const char *noise_w = params && params->shout ? "1.2" : "0.8";
+		
+		execl( piper_path, "piper", 
+			"-m", model_path, 
+			"-c", config_path, 
+			"--speaker", speaker_id, 
+			"--length_scale", length_scale,
+			"--noise_scale", noise_scale,
+			"--noise_w", noise_w,
+			"-f", "-", 
+			NULL );
 		
 		// If we get here, exec failed
 		_exit( 1 );
@@ -571,7 +586,7 @@ static void* TTS_WorkerThread( void *arg ) {
 		// Check cache first
 		if ( !TTS_LoadFromCache( request->text, &request->params, &request->audio ) ) {
 			// Synthesize
-			if ( TTS_SpawnPiper( request->text, &request->audio ) ) {
+			if ( TTS_SpawnPiper( request->text, &request->params, &request->audio ) ) {
 				// Save to cache
 				if ( request->audio ) {
 					TTS_SaveToCache( request->text, &request->params, request->audio );

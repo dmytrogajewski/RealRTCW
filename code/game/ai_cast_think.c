@@ -1065,10 +1065,10 @@ void AICast_Think( int client, float thinktime ) {
 						tts_audio_buffer_t *dummy_audio = NULL;
 						TTS_DefaultParams( &params );
 						// Adjust parameters based on priority (higher priority = louder/more urgent)
-						if ( dialogue.priority >= 8 ) {
+						if ( dialogue.priority >= 6 ) { // Lowered from 8 to 6 to trigger shouting more often
 							params.shout = qtrue;
 							params.gain = 1.2f;
-						} else if ( dialogue.priority >= 6 ) {
+						} else if ( dialogue.priority >= 4 ) {
 							params.gain = 1.1f;
 						}
 						// Check for exclamation marks to add emphasis
