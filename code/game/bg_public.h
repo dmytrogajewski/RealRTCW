@@ -26,6 +26,9 @@ If you have questions concerning this license or the applicable additional terms
 ===========================================================================
 */
 
+#ifndef __BG_PUBLIC_H__
+#define __BG_PUBLIC_H__
+
 /*
  * name:		bg_public.h
  *
@@ -1901,3 +1904,5 @@ float BG_SplineLength( splinePath_t* pSpline );
 void BG_AddSplineControl( splinePath_t* spline, const char* name );
 void BG_LinearPathOrigin2( float radius, splinePath_t** pSpline, float *deltaTime, vec3_t result, qboolean backwards );
 void BG_ClipVelocity( vec3_t in, vec3_t normal, vec3_t out, float overbounce );
+
+#endif // __BG_PUBLIC_H__

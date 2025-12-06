@@ -29,6 +29,9 @@ If you have questions concerning this license or the applicable additional terms
 // Copyright (C) 1999-2000 Id Software, Inc.
 //
 
+#ifndef __G_PUBLIC_H__
+#define __G_PUBLIC_H__
+
 // g_public.h -- game module information visible to server
 
 #define GAME_API_VERSION    8
@@ -478,3 +481,5 @@ typedef enum {
 
 } gameExport_t;
 
+void trap_AddCommand( const char *cmdName );
+#endif // __G_PUBLIC_H__

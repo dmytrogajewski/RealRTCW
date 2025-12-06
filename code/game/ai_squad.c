@@ -99,7 +99,13 @@ void AICast_AssignSquads(void) {
 		cs = &caststates[i];
 		ent = &g_entities[cs->entityNum];
 		
-		if (!ent->inuse) {
+		// Skip invalid or dead entities
+		if (!ent->inuse || ent->health <= 0) {
+			// Clear squad assignment for dead/invalid entities
+			if (cs->squadId >= 0) {
+				cs->squadId = -1;
+				cs->squadRole = SQUAD_ROLE_NONE;
+			}
 			continue;
 		}
 		
@@ -157,18 +163,54 @@ void AICast_AssignSquads(void) {
 		}
 	}
 	
+	// Track previous squad state to suppress duplicate messages
+	static int prevSquadCount = 0;
+	static int prevSquadLeaders[MAX_SQUADS];
+	static int prevSquadMemberCounts[MAX_SQUADS];
+	static qboolean firstAssignment = qtrue;
+	
 	// Assign roles to each squad
 	for (i = 0; i < g_squadCount; i++) {
 		AICast_AssignSquadRoles(i);
 	}
 	
-	if (ai_llm_debug.integer) {
-		G_Printf("Squad assignment: processed %d NPCs, created %d squads (total cast=%d)\n", 
-		        processedCount, g_squadCount, numcast);
-		for (i = 0; i < g_squadCount && i < 10; i++) {
-			G_Printf("  Squad %d: %d members, team %d\n", 
-			        i, g_squads[i].memberCount, g_squads[i].teamNum);
+	// Only print squad formation messages if squads actually changed
+	qboolean squadsChanged = qfalse;
+	if (firstAssignment || g_squadCount != prevSquadCount) {
+		squadsChanged = qtrue;
+	} else {
+		// Check if any squad leaders or member counts changed
+		for (i = 0; i < g_squadCount && i < MAX_SQUADS; i++) {
+			if (g_squads[i].leaderNum != prevSquadLeaders[i] ||
+			    g_squads[i].memberCount != prevSquadMemberCounts[i]) {
+				squadsChanged = qtrue;
+				break;
+			}
 		}
+	}
+	
+	if (squadsChanged || firstAssignment) {
+		if (ai_llm_debug.integer) {
+			G_Printf("Squad assignment: processed %d NPCs, created %d squads (total cast=%d)\n", 
+			        processedCount, g_squadCount, numcast);
+			for (i = 0; i < g_squadCount && i < 10; i++) {
+				G_Printf("  Squad %d: %d members, team %d\n", 
+				        i, g_squads[i].memberCount, g_squads[i].teamNum);
+			}
+		}
+		
+		// Update previous state
+		prevSquadCount = g_squadCount;
+		for (i = 0; i < g_squadCount && i < MAX_SQUADS; i++) {
+			prevSquadLeaders[i] = g_squads[i].leaderNum;
+			prevSquadMemberCounts[i] = g_squads[i].memberCount;
+		}
+		// Clear remaining slots
+		for (i = g_squadCount; i < MAX_SQUADS; i++) {
+			prevSquadLeaders[i] = -1;
+			prevSquadMemberCounts[i] = 0;
+		}
+		firstAssignment = qfalse;
 	}
 }
 
@@ -198,10 +240,20 @@ void AICast_AssignSquadRoles(int squadId) {
 	}
 	
 	// Find best leader (highest rank/health)
+	// First pass: remove dead/invalid members and find leader
 	for (i = 0; i < squad->memberCount; i++) {
 		int entNum = squad->members[i];
+		
+		// Validate entity number
+		if (entNum < 0 || entNum >= MAX_GENTITIES) {
+			continue;
+		}
+		
 		ent = &g_entities[entNum];
-		if (!ent->inuse) continue;
+		if (!ent->inuse || ent->health <= 0) {
+			// Dead or invalid entity - skip it
+			continue;
+		}
 		
 		cs = AICast_GetCastState(entNum);
 		if (!cs) continue;
@@ -213,20 +265,44 @@ void AICast_AssignSquadRoles(int squadId) {
 		}
 	}
 	
-	// Assign roles
+	// If no valid leader found, mark squad as invalid
+	if (leaderIndex < 0 || bestLeaderScore <= 0) {
+		squad->leaderNum = -1;
+		if (ai_llm_debug.integer) {
+			G_Printf("^3[SQUAD %d] Warning: No valid leader found, squad may be disbanded\n", squadId);
+		}
+		return;
+	}
+	
+	// Assign roles - only to valid, living members
+	int validMemberIndex = 0;
 	for (i = 0; i < squad->memberCount; i++) {
 		int entNum = squad->members[i];
+		
+		// Validate entity
+		if (entNum < 0 || entNum >= MAX_GENTITIES) {
+			continue;
+		}
+		
+		ent = &g_entities[entNum];
+		if (!ent->inuse || ent->health <= 0) {
+			// Skip dead/invalid members
+			continue;
+		}
+		
 		cs = AICast_GetCastState(entNum);
 		if (!cs) continue;
 		
+		// Check if this is the leader
 		if (i == leaderIndex) {
 			cs->squadRole = SQUAD_ROLE_LEADER;
 			cs->squadLeaderNum = entNum; // Leader is own leader
 			squad->leaderNum = entNum;
-		} else if (i == 0 && leaderIndex != 0) {
+		} else if (validMemberIndex == 0 && leaderIndex != i) {
+			// First non-leader becomes scout
 			cs->squadRole = SQUAD_ROLE_SCOUT;
 			cs->squadLeaderNum = squad->members[leaderIndex];
-		} else if (i % 2 == 0) {
+		} else if (validMemberIndex % 2 == 0) {
 			cs->squadRole = SQUAD_ROLE_ASSAULT;
 			cs->squadLeaderNum = squad->members[leaderIndex];
 		} else {
@@ -237,13 +313,35 @@ void AICast_AssignSquadRoles(int squadId) {
 		cs->squadMemberCount = squad->memberCount;
 		// Copy squad members list for easy access
 		memcpy(cs->squadMembers, squad->members, sizeof(squad->members));
+		
+		validMemberIndex++;
 	}
 	
-	// Log squad composition
-	if (ai_llm_debug.integer) {
-		gentity_t *leaderEnt = &g_entities[squad->leaderNum];
+	// Log squad composition - only if this is a new formation or significant change
+	// Suppress duplicate messages by checking if leader/member count changed
+	static int lastLoggedSquadId = -1;
+	static int lastLoggedLeader = -1;
+	static int lastLoggedMemberCount = 0;
+	
+	// Only log if this is a different squad, or leader/member count changed
+	if (ai_llm_debug.integer && 
+	    (squadId != lastLoggedSquadId || 
+	     squad->leaderNum != lastLoggedLeader || 
+	     squad->memberCount != lastLoggedMemberCount)) {
+		const char *leaderName = "(null)";
+		if (squad->leaderNum >= 0 && squad->leaderNum < MAX_GENTITIES) {
+			gentity_t *leaderEnt = &g_entities[squad->leaderNum];
+			if (leaderEnt->inuse && leaderEnt->aiName) {
+				leaderName = leaderEnt->aiName;
+			}
+		}
 		G_Printf("^5[SQUAD %d] Formed: Leader=%s, %d members, Team %d\n", 
-		        squadId, leaderEnt->aiName, squad->memberCount, squad->teamNum);
+		        squadId, leaderName, squad->memberCount, squad->teamNum);
+		
+		// Update tracking
+		lastLoggedSquadId = squadId;
+		lastLoggedLeader = squad->leaderNum;
+		lastLoggedMemberCount = squad->memberCount;
 	}
 }
 
@@ -361,45 +459,179 @@ void AICast_SquadMemberExecute(cast_state_t *cs) {
 	distToFormation = Distance(ent->r.currentOrigin, formationPos);
 	
 	// Maintain formation if far from position and not in active combat
-	if (ai_formation_strict.value > 0.5f && distToFormation > 128 && cs->aiState < AISTATE_COMBAT) {
+	// Formation is more important for support roles, less for scouts
+	float formationTolerance = 128.0f;
+	if (cs->squadRole == SQUAD_ROLE_SUPPORT) {
+		formationTolerance = 96.0f; // Tighter formation for support
+	} else if (cs->squadRole == SQUAD_ROLE_SCOUT) {
+		formationTolerance = 192.0f; // Looser for scouts
+	}
+	
+	if (ai_formation_strict.value > 0.5f && distToFormation > formationTolerance && cs->aiState < AISTATE_COMBAT) {
 		// Move to formation position
 		vec3_t moveDir;
 		VectorSubtract(formationPos, ent->r.currentOrigin, moveDir);
 		VectorNormalize(moveDir);
 		
-		// Use formation position as movement goal
-		VectorCopy(formationPos, cs->bs->teamgoal.origin);
-		cs->bs->teamgoal.entitynum = -1;
-		cs->bs->teamgoal.areanum = BotPointAreaNum(formationPos);
+		// Use formation position as movement goal (if bot state is valid)
+		if (cs->bs && cs->bs->inuse) {
+			VectorCopy(formationPos, cs->bs->teamgoal.origin);
+			cs->bs->teamgoal.entitynum = -1;
+			cs->bs->teamgoal.areanum = BotPointAreaNum(formationPos);
+		}
 		
 		static int lastFormationLog[MAX_CLIENTS] = {0};
 		if (ai_llm_debug.integer >= 2 && level.time - lastFormationLog[cs->entityNum] > 10000) {
-			G_Printf("^6[FORMATION] %s moving to formation position (%.0f units away)\n", 
-			        ent->aiName, distToFormation);
+			const char *roleStr = "Member";
+			switch (cs->squadRole) {
+				case SQUAD_ROLE_SCOUT: roleStr = "Scout"; break;
+				case SQUAD_ROLE_ASSAULT: roleStr = "Assault"; break;
+				case SQUAD_ROLE_SUPPORT: roleStr = "Support"; break;
+			}
+			G_Printf("^6[FORMATION] %s (%s) moving to formation position (%.0f units away)\n", 
+			        ent->aiName, roleStr, distToFormation);
 			lastFormationLog[cs->entityNum] = level.time;
 		}
 	}
 	
-	// Execute current squad order
+	// Check if leader or squad member has spotted an enemy - react immediately
+	if (leaderEnt->inuse && leaderEnt->health > 0) {
+		cast_state_t *leaderCS = AICast_GetCastState(cs->squadLeaderNum);
+		if (leaderCS && leaderCS->enemyNum >= 0) {
+			gentity_t *enemyEnt = &g_entities[leaderCS->enemyNum];
+			if (enemyEnt->inuse) {
+				// Leader has an enemy - check if we can see it too
+				if (AICast_EntityVisible(cs, leaderCS->enemyNum, qtrue)) {
+					// We can see the enemy - engage immediately
+					if (cs->enemyNum != leaderCS->enemyNum) {
+						cs->enemyNum = leaderCS->enemyNum;
+						if (cs->aiState < AISTATE_COMBAT) {
+							AICast_StateChange(cs, AISTATE_COMBAT);
+						}
+						// Take cover and engage
+						vec3_t enemyPos;
+						VectorCopy(enemyEnt->r.currentOrigin, enemyPos);
+						if (AICast_GetTakeCoverPos(cs, leaderCS->enemyNum, enemyPos, cs->takeCoverPos)) {
+							cs->takeCoverTime = level.time + 2000 + rand() % 2000;
+							if (ai_llm_debug.integer >= 2) {
+								G_Printf("^3[SQUAD] %s reacting to leader's enemy contact, taking cover\n", ent->aiName);
+							}
+						}
+					}
+				} else {
+					// Can't see enemy but leader can - move to support position
+					vec3_t diff;
+					VectorSubtract(enemyEnt->r.currentOrigin, ent->r.currentOrigin, diff);
+					float dist = VectorLength(diff);
+					if (dist < 1000.0f && cs->enemyNum < 0) {
+						// Set enemy from leader's intel
+						cs->enemyNum = leaderCS->enemyNum;
+						cs->lastEnemy = leaderCS->enemyNum;
+						
+						// Try to find cover position
+						vec3_t enemyPos;
+						VectorCopy(enemyEnt->r.currentOrigin, enemyPos);
+						if (AICast_GetTakeCoverPos(cs, leaderCS->enemyNum, enemyPos, cs->takeCoverPos)) {
+							cs->takeCoverTime = level.time + 3000 + rand() % 2000;
+							if (cs->aiState < AISTATE_COMBAT) {
+								AICast_StateChange(cs, AISTATE_COMBAT);
+							}
+							if (ai_llm_debug.integer >= 2) {
+								G_Printf("^3[SQUAD] %s moving to support leader against enemy (%.0f units)\n", 
+								        ent->aiName, dist);
+							}
+						} else if (cs->aiState < AISTATE_COMBAT) {
+							// No cover but still engage
+							AICast_StateChange(cs, AISTATE_COMBAT);
+						}
+					}
+				}
+			}
+		}
+		
+		// Also check other squad members for enemy contacts
+		int j;
+		for (j = 0; j < squad->memberCount; j++) {
+			int memberNum = squad->members[j];
+			if (memberNum == cs->entityNum || memberNum == cs->squadLeaderNum) continue;
+			
+			cast_state_t *memberCS = AICast_GetCastState(memberNum);
+			if (memberCS && memberCS->enemyNum >= 0) {
+				gentity_t *memberEnt = &g_entities[memberNum];
+				gentity_t *enemyEnt = &g_entities[memberCS->enemyNum];
+				if (memberEnt->inuse && enemyEnt->inuse && memberEnt->health > 0) {
+					// Squad member has enemy - check if we can see it
+					if (AICast_EntityVisible(cs, memberCS->enemyNum, qtrue)) {
+						// We can see the enemy - engage
+						if (cs->enemyNum != memberCS->enemyNum) {
+							cs->enemyNum = memberCS->enemyNum;
+							if (cs->aiState < AISTATE_COMBAT) {
+								AICast_StateChange(cs, AISTATE_COMBAT);
+							}
+							// Take cover
+							vec3_t enemyPos;
+							VectorCopy(enemyEnt->r.currentOrigin, enemyPos);
+							if (AICast_GetTakeCoverPos(cs, memberCS->enemyNum, enemyPos, cs->takeCoverPos)) {
+								cs->takeCoverTime = level.time + 2000 + rand() % 2000;
+							}
+						}
+						break; // Found enemy from squad member
+					}
+				}
+			}
+		}
+	}
+	
+	// Execute current squad order with role-based behavior
 	if (squad->currentOrder[0]) {
-		// Translate squad orders into actions
+		// Translate squad orders into actions based on role
 		if (strcmp(squad->currentOrder, "assault") == 0) {
-			// Aggressive stance for assault
-			cs->attributes[AGGRESSION] = 0.9f;
-			cs->llm_currentAction = LLM_ACTION_ATTACK;
+			// Role-based assault behavior
+			if (cs->squadRole == SQUAD_ROLE_SCOUT) {
+				// Scout: Move ahead to spot enemies
+				cs->attributes[AGGRESSION] = 0.7f;
+				cs->llm_currentAction = LLM_ACTION_INVESTIGATE;
+			} else if (cs->squadRole == SQUAD_ROLE_ASSAULT) {
+				// Assault: Aggressive engagement
+				cs->attributes[AGGRESSION] = 0.9f;
+				cs->llm_currentAction = LLM_ACTION_ATTACK;
+			} else if (cs->squadRole == SQUAD_ROLE_SUPPORT) {
+				// Support: Provide covering fire
+				cs->attributes[AGGRESSION] = 0.6f;
+				cs->llm_currentAction = LLM_ACTION_COVERING_FIRE;
+			}
 			cs->llm_actionStartTime = level.time;
 		} else if (strcmp(squad->currentOrder, "defensive_position") == 0) {
-			// Defensive stance
-			cs->attributes[AGGRESSION] = 0.4f;
-			cs->attributes[TACTICAL] = 0.9f;
-			cs->llm_currentAction = LLM_ACTION_DEFEND;
+			// Role-based defensive behavior
+			if (cs->squadRole == SQUAD_ROLE_SCOUT) {
+				// Scout: Watch flanks
+				cs->attributes[AGGRESSION] = 0.3f;
+				cs->attributes[TACTICAL] = 0.8f;
+				cs->llm_currentAction = LLM_ACTION_OVERWATCH;
+			} else if (cs->squadRole == SQUAD_ROLE_ASSAULT) {
+				// Assault: Hold position
+				cs->attributes[AGGRESSION] = 0.4f;
+				cs->attributes[TACTICAL] = 0.9f;
+				cs->llm_currentAction = LLM_ACTION_HOLD_POSITION;
+			} else if (cs->squadRole == SQUAD_ROLE_SUPPORT) {
+				// Support: Defensive fire
+				cs->attributes[AGGRESSION] = 0.5f;
+				cs->attributes[TACTICAL] = 0.9f;
+				cs->llm_currentAction = LLM_ACTION_DEFEND;
+			}
 			cs->llm_actionStartTime = level.time;
 		} else if (strcmp(squad->currentOrder, "fallback") == 0) {
-			// Retreat order
-			cs->llm_currentAction = LLM_ACTION_RETREAT;
+			// Role-based retreat behavior
+			if (cs->squadRole == SQUAD_ROLE_SCOUT) {
+				// Scout: Cover retreat
+				cs->llm_currentAction = LLM_ACTION_COVERING_FIRE;
+			} else {
+				// Others: Retreat
+				cs->llm_currentAction = LLM_ACTION_RETREAT;
+			}
 			cs->llm_actionStartTime = level.time;
 		} else if (strcmp(squad->currentOrder, "support_fire") == 0) {
-			// Covering fire
+			// Covering fire order
 			cs->llm_currentAction = LLM_ACTION_COVERING_FIRE;
 			cs->llm_actionStartTime = level.time;
 		}
@@ -706,12 +938,18 @@ Remove member from squad
 void AICast_RemoveSquadMember(int squadId, int entityNum) {
 	squad_t *squad;
 	int i, j;
+	qboolean wasLeader = qfalse;
 	
 	if (squadId < 0 || squadId >= g_squadCount) {
 		return;
 	}
 	
 	squad = &g_squads[squadId];
+	
+	// Check if this was the leader
+	if (squad->leaderNum == entityNum) {
+		wasLeader = qtrue;
+	}
 	
 	// Find and remove member
 	for (i = 0; i < squad->memberCount; i++) {
@@ -722,9 +960,27 @@ void AICast_RemoveSquadMember(int squadId, int entityNum) {
 			}
 			squad->memberCount--;
 			
-			// Reassign roles if needed
+			// Clear squad reference from removed entity
+			cast_state_t *cs = AICast_GetCastState(entityNum);
+			if (cs) {
+				cs->squadId = -1;
+				cs->squadRole = SQUAD_ROLE_NONE;
+				cs->squadLeaderNum = -1;
+			}
+			
+			// Reassign roles if needed (especially if leader died)
 			if (squad->memberCount > 0) {
+				if (wasLeader) {
+					// Leader died - immediately promote new leader
+					if (ai_llm_debug.integer) {
+						G_Printf("^3[SQUAD %d] Leader died, promoting new leader\n", squadId);
+					}
+				}
 				AICast_AssignSquadRoles(squadId);
+			} else {
+				// Squad is empty, mark as inactive
+				squad->active = qfalse;
+				squad->leaderNum = -1;
 			}
 			break;
 		}

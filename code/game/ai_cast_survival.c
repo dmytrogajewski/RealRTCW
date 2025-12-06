@@ -47,6 +47,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "../botlib/botai.h"          //bot ai interface
 
 #include "ai_cast.h"
+#include "ai_squad.h"
 #include "g_survival.h"
 
 #include "../steam/steam.h"
@@ -1264,6 +1265,12 @@ void AICast_SurvivalRespawn(gentity_t *ent, cast_state_t *cs) {
 					svParams.spawnedThisWaveFriendly++;
 				} else { 
 					svParams.spawnedThisWave++;
+				}
+
+				// Assign to squad on respawn
+				if ( ai_squad_coordination.integer ) {
+					// Trigger squad reassignment to include this entity
+					AICast_AssignSquads();
 				}
 
 			} else {

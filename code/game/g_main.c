@@ -36,6 +36,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "ai_tactical_memory.h"
 #include "ai_squad.h"
 #include "ai_strategy.h"
+#include "g_tts.h"
 
 level_locals_t level;
 
@@ -203,6 +204,17 @@ vmCvar_t ai_tactical_memory;        // Enable shared tactical memory
 vmCvar_t ai_adaptive_strategy;      // Enable adaptive tactics
 vmCvar_t ai_formation_strict;       // How strictly to maintain formations
 
+// TTS Integration
+vmCvar_t g_tts_enable;
+vmCvar_t g_tts_mode;
+vmCvar_t g_tts_cache_persist;
+vmCvar_t g_tts_volume;
+vmCvar_t g_tts_piper_path;
+vmCvar_t g_tts_model_path;
+vmCvar_t g_tts_model_config_path;
+vmCvar_t g_tts_timeout;
+vmCvar_t g_tts_debug;
+
 cvarTable_t gameCvarTable[] = {
 	// don't override the cheat state set by the system
 	{&g_cheats, "sv_cheats", "", 0, qfalse},
@@ -360,7 +372,18 @@ cvarTable_t gameCvarTable[] = {
 	{&ai_squad_coordination, "ai_squad_coordination", "1", CVAR_ARCHIVE, 0, qfalse},
 	{&ai_tactical_memory, "ai_tactical_memory", "1", CVAR_ARCHIVE, 0, qfalse},
 	{&ai_adaptive_strategy, "ai_adaptive_strategy", "1", CVAR_ARCHIVE, 0, qfalse},
-	{&ai_formation_strict, "ai_formation_strict", "0.7", CVAR_ARCHIVE, 0, qfalse}
+	{&ai_formation_strict, "ai_formation_strict", "0.7", CVAR_ARCHIVE, 0, qfalse},
+	
+	// TTS Integration
+	{&g_tts_enable, "g_tts_enable", "1", CVAR_ARCHIVE, 0, qfalse},
+	{&g_tts_mode, "g_tts_mode", "0", CVAR_ARCHIVE, 0, qfalse},
+	{&g_tts_cache_persist, "g_tts_cache_persist", "0", CVAR_ARCHIVE, 0, qfalse},
+	{&g_tts_volume, "g_tts_volume", "1.0", CVAR_ARCHIVE, 0, qfalse},
+	{&g_tts_piper_path, "g_tts_piper_path", "main/tts/piper", CVAR_ARCHIVE, 0, qfalse},
+	{&g_tts_model_path, "g_tts_model_path", "main/tts/de_DE-thorsten_emotional-medium.onnx", CVAR_ARCHIVE, 0, qfalse},
+	{&g_tts_model_config_path, "g_tts_model_config_path", "main/tts/de_DE-thorsten_emotional-medium.onnx.json", CVAR_ARCHIVE, 0, qfalse},
+	{&g_tts_timeout, "g_tts_timeout", "500", CVAR_ARCHIVE, 0, qfalse},
+	{&g_tts_debug, "g_tts_debug", "0", CVAR_ARCHIVE, 0, qfalse}
 };
 
 static int gameCvarTableSize = ARRAY_LEN( gameCvarTable );
@@ -779,7 +802,7 @@ void G_CheckForCursorHints( gentity_t *ent ) {
 				}
 			} else if ( checkEnt->s.eType == ET_ITEM )      {
 				gitem_t *it;
-				it = &bg_itemlist[checkEnt->item - bg_itemlist];
+				it = &bg_itemlist[(int)(checkEnt->item - bg_itemlist)];
 
 				hintDist = CH_ACTIVATE_DIST;
 
@@ -1058,8 +1081,16 @@ void G_RegisterCvars( void ) {
 	qboolean remapped = qfalse;
 
 	for ( i = 0, cv = gameCvarTable ; i < gameCvarTableSize ; i++, cv++ ) {
+		// Skip entries with NULL or empty cvarName
+		if ( !cv->cvarName || !cv->cvarName[0] ) {
+			G_Printf( "^3WARNING: Skipping CVAR registration for entry %d - NULL or empty cvarName\n", i );
+			continue;
+		}
+		// Ensure defaultString is not NULL (use empty string if NULL)
+		const char *defaultValue = cv->defaultString ? cv->defaultString : "";
+		
 		trap_Cvar_Register( cv->vmCvar, cv->cvarName,
-							cv->defaultString, cv->cvarFlags );
+							defaultValue, cv->cvarFlags );
 		if ( cv->vmCvar ) {
 			cv->modificationCount = cv->vmCvar->modificationCount;
 		}
@@ -1352,16 +1383,16 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	// initialize all entities for this game
 	memset( g_entities, 0, MAX_GENTITIES * sizeof( g_entities[0] ) );
-	level.gentities = g_entities;
+	level.gentities = (struct gentity_s *)g_entities;
 
 	// initialize all clients for this game
 	level.maxclients = g_maxclients.integer;
 	memset( g_clients, 0, MAX_CLIENTS * sizeof( g_clients[0] ) );
-	level.clients = g_clients;
+	level.clients = (struct gclient_s *)g_clients;
 
 	// set client fields on player ents
 	for ( i = 0 ; i < level.maxclients ; i++ ) {
-		g_entities[i].client = level.clients + i;
+		g_entities[i].client = (struct gclient_s *)(level.clients + i);
 	}
 
 	// always leave room for the max number of clients,
@@ -1375,7 +1406,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	// let the server system know where the entites are
 	trap_LocateGameData( level.gentities, level.num_entities, sizeof( gentity_t ),
-						 &level.clients[0].ps, sizeof( level.clients[0] ) );
+						 &g_clients[0].ps, sizeof( g_clients[0] ) );
 
 	// Ridah
 		char s[10];
@@ -1409,6 +1440,34 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 				G_Printf( "^2LLM system initialized successfully.\n" );
 			}
 		}
+		
+		// Initialize TTS system if enabled
+		// Update CVAR to ensure it's current
+		trap_Cvar_Update( &g_tts_enable );
+		
+		// TTS should be enabled by default (default value is "1" in CVAR table)
+		// Only force it to 1 if the CVAR string is empty (meaning it was never set)
+		// Don't override if user explicitly set it to 0
+		if ( g_tts_enable.integer == 0 && ( !g_tts_enable.string || !g_tts_enable.string[0] ) ) {
+			G_Printf( "[TTS] g_tts_enable not set, using default: 1 (TTS enabled by default)\n" );
+			trap_Cvar_Set( "g_tts_enable", "1" );
+			trap_Cvar_Update( &g_tts_enable );
+		}
+		
+		G_Printf( "========================================\n" );
+		G_Printf( "[TTS] Checking TTS status: g_tts_enable = %d\n", g_tts_enable.integer );
+		G_Printf( "[TTS] Piper path: %s\n", g_tts_piper_path.string );
+		G_Printf( "[TTS] Model path: %s\n", g_tts_model_path.string );
+		if ( g_tts_enable.integer ) {
+			G_Printf( "[TTS] Attempting TTS initialization...\n" );
+			if ( !TTS_Init() ) {
+				G_Printf( "WARNING: TTS initialization failed. TTS disabled.\n" );
+				trap_Cvar_Set( "g_tts_enable", "0" );
+			}
+		} else {
+			G_Printf( "[TTS] TTS is disabled (g_tts_enable = 0). Set g_tts_enable 1 to enable.\n" );
+		}
+		G_Printf( "========================================\n" );
 
 		AICast_ScriptLoad();
 		
@@ -1501,6 +1560,9 @@ void G_ShutdownGame( int restart ) {
 	if (LLM_IsReady()) {
 		LLM_PauseProcessing(qtrue);
 	}
+	
+	// Shutdown TTS system
+	TTS_Shutdown();
 
 	if ( level.logFile ) {
 		G_LogPrintf( "ShutdownGame:\n" );
@@ -1617,15 +1679,15 @@ void AddTournamentPlayer( void ) {
 	nextInLine = NULL;
 
 	for ( i = 0 ; i < level.maxclients ; i++ ) {
-		client = &level.clients[i];
-		if ( client->pers.connected != CON_CONNECTED ) {
+		client = &g_clients[i];
+		if ( (int)client->pers.connected != (int)CON_CONNECTED ) {
 			continue;
 		}
-		if ( client->sess.sessionTeam != TEAM_SPECTATOR ) {
+		if ( (int)client->sess.sessionTeam != (int)TEAM_SPECTATOR ) {
 			continue;
 		}
 		// never select the dedicated follow or scoreboard clients
-		if ( client->sess.spectatorState == SPECTATOR_SCOREBOARD ||
+		if ( (int)client->sess.spectatorState == (int)SPECTATOR_SCOREBOARD ||
 			 client->sess.spectatorClient < 0  ) {
 			continue;
 		}
@@ -1641,7 +1703,7 @@ void AddTournamentPlayer( void ) {
 	level.warmupTime = -1;
 
 	// set them to free-for-all team
-	SetTeam( &g_entities[ nextInLine - level.clients ], "f" );
+	SetTeam( &g_entities[ (int)(nextInLine - (struct gclient_s *)g_clients) ], "f" );
 }
 
 /*
@@ -1659,13 +1721,13 @@ void AddTournamentQueue(gclient_t *client)
 	
 	for(index = 0; index < level.maxclients; index++)
 	{
-		curclient = &level.clients[index];
+		curclient = &g_clients[index];
 		
-		if(curclient->pers.connected != CON_DISCONNECTED)
+		if((int)curclient->pers.connected != (int)CON_DISCONNECTED)
 		{
 			if(curclient == client)
 				curclient->sess.spectatorNum = 0;
-			else if(curclient->sess.sessionTeam == TEAM_SPECTATOR)
+			else if((int)curclient->sess.sessionTeam == (int)TEAM_SPECTATOR)
 				curclient->sess.spectatorNum++;
 		}
 	}
@@ -1687,7 +1749,7 @@ void RemoveTournamentLoser( void ) {
 
 	clientNum = level.sortedClients[1];
 
-	if ( level.clients[ clientNum ].pers.connected != CON_CONNECTED ) {
+	if ( level.clients[ clientNum ].pers.connected != (clientConnected_t)CON_CONNECTED ) {
 		return;
 	}
 
@@ -1706,13 +1768,13 @@ void AdjustTournamentScores( void ) {
 	int clientNum;
 
 	clientNum = level.sortedClients[0];
-	if ( level.clients[ clientNum ].pers.connected == CON_CONNECTED ) {
+	if ( level.clients[ clientNum ].pers.connected == (clientConnected_t)CON_CONNECTED ) {
 		level.clients[ clientNum ].sess.wins++;
 		ClientUserinfoChanged( clientNum );
 	}
 
 	clientNum = level.sortedClients[1];
-	if ( level.clients[ clientNum ].pers.connected == CON_CONNECTED ) {
+	if ( level.clients[ clientNum ].pers.connected == (clientConnected_t)CON_CONNECTED ) {
 		level.clients[ clientNum ].sess.losses++;
 		ClientUserinfoChanged( clientNum );
 	}
@@ -1728,28 +1790,28 @@ SortRanks
 int QDECL SortRanks( const void *a, const void *b ) {
 	gclient_t   *ca, *cb;
 
-	ca = &level.clients[*(int *)a];
-	cb = &level.clients[*(int *)b];
+	ca = &g_clients[*(int *)a];
+	cb = &g_clients[*(int *)b];
 
 	// sort special clients last
-	if ( ca->sess.spectatorState == SPECTATOR_SCOREBOARD || ca->sess.spectatorClient < 0 ) {
+        if ( (int)ca->sess.spectatorState == (int)SPECTATOR_SCOREBOARD || ca->sess.spectatorClient < 0 ) {
 		return 1;
 	}
-	if ( cb->sess.spectatorState == SPECTATOR_SCOREBOARD || cb->sess.spectatorClient < 0  ) {
+        if ( (int)cb->sess.spectatorState == (int)SPECTATOR_SCOREBOARD || cb->sess.spectatorClient < 0  ) {
 		return -1;
 	}
 
 	// then connecting clients
-	if ( ca->pers.connected == CON_CONNECTING ) {
+        if ( (int)ca->pers.connected == (int)CON_CONNECTING ) {
 		return 1;
 	}
-	if ( cb->pers.connected == CON_CONNECTING ) {
+        if ( (int)cb->pers.connected == (int)CON_CONNECTING ) {
 		return -1;
 	}
 
 
 	// then spectators
-	if ( ca->sess.sessionTeam == TEAM_SPECTATOR && cb->sess.sessionTeam == TEAM_SPECTATOR ) {
+	if ( (int)ca->sess.sessionTeam == (int)TEAM_SPECTATOR && (int)cb->sess.sessionTeam == (int)TEAM_SPECTATOR ) {
 		if ( ca->sess.spectatorNum > cb->sess.spectatorNum ) {
 			return -1;
 		}
@@ -1758,10 +1820,10 @@ int QDECL SortRanks( const void *a, const void *b ) {
 		}
 		return 0;
 	}
-	if ( ca->sess.sessionTeam == TEAM_SPECTATOR ) {
+	if ( (int)ca->sess.sessionTeam == (int)TEAM_SPECTATOR ) {
 		return 1;
 	}
-	if ( cb->sess.sessionTeam == TEAM_SPECTATOR ) {
+	if ( (int)cb->sess.sessionTeam == (int)TEAM_SPECTATOR ) {
 		return -1;
 	}
 
@@ -1804,21 +1866,21 @@ void CalculateRanks( void ) {
 		level.numteamVotingClients[i] = 0;
 
 	for ( i = 0 ; i < level.maxclients ; i++ ) {
-		if ( level.clients[i].pers.connected != CON_DISCONNECTED ) {
+		if ( level.clients[i].pers.connected != (clientConnected_t)CON_DISCONNECTED ) {
 			level.sortedClients[level.numConnectedClients] = i;
 			level.numConnectedClients++;
 
-			if ( level.clients[i].sess.sessionTeam != TEAM_SPECTATOR ) {
+			if ( (int)level.clients[i].sess.sessionTeam != (int)TEAM_SPECTATOR ) {
 				level.numNonSpectatorClients++;
 
 				// decide if this should be auto-followed
-				if ( level.clients[i].pers.connected == CON_CONNECTED ) {
+				if ( level.clients[i].pers.connected == (clientConnected_t)CON_CONNECTED ) {
 					level.numPlayingClients++;
 					if ( !( g_entities[i].r.svFlags & SVF_BOT ) ) {
 						level.numVotingClients++;
-						if ( level.clients[i].sess.sessionTeam == TEAM_RED ) {
+						if ( level.clients[i].sess.sessionTeam == (team_t)TEAM_RED ) {
 							level.numteamVotingClients[0]++;
-						} else if ( level.clients[i].sess.sessionTeam == TEAM_BLUE ) {
+						} else if ( level.clients[i].sess.sessionTeam == (team_t)TEAM_BLUE ) {
 							level.numteamVotingClients[1]++;
 						}
 					}
@@ -1838,7 +1900,7 @@ void CalculateRanks( void ) {
 		rank = -1;
 		score = 0;
 		for ( i = 0;  i < level.numPlayingClients; i++ ) {
-			cl = &level.clients[ level.sortedClients[i] ];
+			cl = &g_clients[level.sortedClients[i]];
 			newScore = cl->ps.persistant[PERS_SCORE];
 			if ( i == 0 || newScore != score ) {
 				rank = i;
@@ -1899,7 +1961,7 @@ void SendScoreboardMessageToAllClients( void ) {
 	int i;
 
 	for ( i = 0 ; i < level.maxclients ; i++ ) {
-		if ( level.clients[ i ].pers.connected == CON_CONNECTED ) {
+		if ( level.clients[ i ].pers.connected == (clientConnected_t)CON_CONNECTED ) {
 			DeathmatchScoreboardMessage( g_entities + i );
 		}
 	}
@@ -1915,7 +1977,7 @@ If a new client connects, this will be called after the spawn function.
 */
 void MoveClientToIntermission( gentity_t *ent ) {
 	// take out of follow mode if needed
-	if ( ent->client->sess.spectatorState == SPECTATOR_FOLLOW ) {
+        if ( (int)ent->client->sess.spectatorState == (int)SPECTATOR_FOLLOW ) {
 		StopFollowing( ent );
 	}
 
@@ -2034,8 +2096,8 @@ void ExitLevel( void ) {
 	level.teamScores[TEAM_RED] = 0;
 	level.teamScores[TEAM_BLUE] = 0;
 	for ( i = 0 ; i < g_maxclients.integer ; i++ ) {
-		cl = level.clients + i;
-		if ( cl->pers.connected != CON_CONNECTED ) {
+		cl = &g_clients[i];
+                if ( (int)cl->pers.connected != (int)CON_CONNECTED ) {
 			continue;
 		}
 		cl->ps.persistant[PERS_SCORE] = 0;
@@ -2055,7 +2117,7 @@ void ExitLevel( void ) {
 		}
 		// done.
 
-		if ( level.clients[i].pers.connected == CON_CONNECTED ) {
+		if ( level.clients[i].pers.connected == (clientConnected_t)CON_CONNECTED ) {
 			level.clients[i].pers.connected = CON_CONNECTING;
 		}
 	}
@@ -2128,12 +2190,12 @@ void LogExit( const char *string ) {
 	for ( i = 0 ; i < numSorted ; i++ ) {
 		int ping;
 
-		cl = &level.clients[level.sortedClients[i]];
+		cl = &g_clients[level.sortedClients[i]];
 
-		if ( cl->sess.sessionTeam == TEAM_SPECTATOR ) {
+		if ( (int)cl->sess.sessionTeam == (int)TEAM_SPECTATOR ) {
 			continue;
 		}
-		if ( cl->pers.connected == CON_CONNECTING ) {
+                if ( (int)cl->pers.connected == (int)CON_CONNECTING ) {
 			continue;
 		}
 
@@ -2245,14 +2307,14 @@ void CheckExitRules( void ) {
 			return;
 		}
 
-		for ( i = 0 ; i < g_maxclients.integer ; i++ ) {
-			cl = level.clients + i;
-			if ( cl->pers.connected != CON_CONNECTED ) {
-				continue;
-			}
-			if ( cl->sess.sessionTeam != TEAM_FREE ) {
-				continue;
-			}
+	for ( i = 0 ; i < g_maxclients.integer ; i++ ) {
+		cl = &g_clients[i];
+                if ( (int)cl->pers.connected != (int)CON_CONNECTED ) {
+			continue;
+		}
+                if ( (int)cl->sess.sessionTeam != (int)TEAM_FREE ) {
+			continue;
+		}
 
 			/*if ( cl->ps.persistant[PERS_SCORE] >= g_fraglimit.integer ) {
 				LogExit( "Fraglimit hit." );
@@ -2721,6 +2783,9 @@ void G_RunFrame( int levelTime ) {
 
 	// for tracking changes
 	CheckCvars();
+	
+	// Update TTS system (process completed requests)
+	TTS_Update();
 
 	if ( g_listEntity.integer ) {
 		for ( i = 0; i < MAX_GENTITIES; i++ ) {

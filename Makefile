@@ -2703,6 +2703,7 @@ Q3GOBJ_ = \
   $(B)/$(BASEGAME)/game/g_save.o \
   $(B)/$(BASEGAME)/game/g_script_actions.o \
   $(B)/$(BASEGAME)/game/g_script.o \
+  $(B)/$(BASEGAME)/game/g_tts.o \
   $(B)/$(BASEGAME)/game/g_session.o \
   $(B)/$(BASEGAME)/game/g_spawn.o \
   $(B)/$(BASEGAME)/game/g_svcmds.o \
@@ -3068,22 +3069,57 @@ TOOLSOBJ = $(LBURGOBJ) $(Q3CPPOBJ) $(Q3RCCOBJ) $(Q3LCCOBJ) $(Q3ASMOBJ)
 STRINGOBJ = $(Q3R2STRINGOBJ)
 
 
-install-steam: release
+install-steam:
 	@echo "Installing to Steam directory..."
 	@STEAMDIR="$(HOME)/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/RealRTCW"; \
 	if [ ! -d "$$STEAMDIR" ]; then \
 		echo "Error: Steam directory not found at $$STEAMDIR"; \
 		exit 1; \
 	fi; \
-	echo "Installing executable..."; \
-	cp -v $(BR)/$(CLIENTBIN)$(FULLBINEXT) "$$STEAMDIR/$(CLIENTBIN)$(FULLBINEXT)"; \
+	echo "Validating build version..."; \
+	BUILD_BIN="$(BR)/$(CLIENTBIN)$(FULLBINEXT)"; \
+	INSTALLED_BIN="$$STEAMDIR/$(CLIENTBIN)$(FULLBINEXT)"; \
+	KEY_SOURCE="code/game/g_main.c"; \
+	if [ ! -f "$$BUILD_BIN" ]; then \
+		echo "Warning: Build not found. Building release first..."; \
+		$(MAKE) release || echo "Warning: Build failed, but continuing with TTS installation..."; \
+	fi; \
+	if [ -f "$$BUILD_BIN" ] && [ -f "$$KEY_SOURCE" ]; then \
+		BUILD_TIME=$$(stat -c %Y "$$BUILD_BIN" 2>/dev/null || stat -f %m "$$BUILD_BIN" 2>/dev/null || echo 0); \
+		SOURCE_TIME=$$(stat -c %Y "$$KEY_SOURCE" 2>/dev/null || stat -f %m "$$KEY_SOURCE" 2>/dev/null || echo 0); \
+		if [ -f "$$INSTALLED_BIN" ]; then \
+			INSTALLED_TIME=$$(stat -c %Y "$$INSTALLED_BIN" 2>/dev/null || stat -f %m "$$INSTALLED_BIN" 2>/dev/null || echo 0); \
+			if [ $$SOURCE_TIME -gt $$BUILD_TIME ]; then \
+				echo "WARNING: Source files are newer than build! Rebuilding..."; \
+				$(MAKE) release || echo "Warning: Build failed, but continuing..."; \
+				BUILD_TIME=$$(stat -c %Y "$$BUILD_BIN" 2>/dev/null || stat -f %m "$$BUILD_BIN" 2>/dev/null || echo 0); \
+			fi; \
+			if [ $$BUILD_TIME -le $$INSTALLED_TIME ]; then \
+				echo "WARNING: Installed version appears to be newer or same as build!"; \
+				echo "  Build time: $$(date -d @$$BUILD_TIME 2>/dev/null || date -r $$BUILD_TIME 2>/dev/null || echo 'unknown')"; \
+				echo "  Installed time: $$(date -d @$$INSTALLED_TIME 2>/dev/null || date -r $$INSTALLED_TIME 2>/dev/null || echo 'unknown')"; \
+				echo "  Source time: $$(date -d @$$SOURCE_TIME 2>/dev/null || date -r $$SOURCE_TIME 2>/dev/null || echo 'unknown')"; \
+				echo "  Continuing anyway (use 'make release' first to ensure latest build)..."; \
+			else \
+				echo "✓ Build is newer than installed version. Proceeding with installation..."; \
+			fi; \
+		else \
+			echo "✓ No existing installation found. Installing new build..."; \
+		fi; \
+	fi; \
+	if [ -f "$(BR)/$(CLIENTBIN)$(FULLBINEXT)" ]; then \
+		echo "Installing executable..."; \
+		cp -v $(BR)/$(CLIENTBIN)$(FULLBINEXT) "$$STEAMDIR/$(CLIENTBIN)$(FULLBINEXT)"; \
+	else \
+		echo "Warning: Executable not found, skipping..."; \
+	fi; \
 	echo "Creating launch scripts with LLM library support..."; \
 	echo '#!/bin/bash' > "$$STEAMDIR/RealRTCW.sh"; \
 	echo '# Steam launcher for RealRTCW native Linux version with LLM support' >> "$$STEAMDIR/RealRTCW.sh"; \
 	echo '' >> "$$STEAMDIR/RealRTCW.sh"; \
 	echo 'cd "$$(dirname "$$0")"' >> "$$STEAMDIR/RealRTCW.sh"; \
-	echo '# Add current directory and Main to library path for LLM libraries' >> "$$STEAMDIR/RealRTCW.sh"; \
-	echo 'export LD_LIBRARY_PATH=".:Main:$$LD_LIBRARY_PATH"' >> "$$STEAMDIR/RealRTCW.sh"; \
+	echo '# Add current directory and Main to library path for LLM and TTS libraries' >> "$$STEAMDIR/RealRTCW.sh"; \
+	echo 'export LD_LIBRARY_PATH=".:Main:Main/tts:$$LD_LIBRARY_PATH"' >> "$$STEAMDIR/RealRTCW.sh"; \
 	echo 'exec ./RealRTCW.x86_64 "$$@"' >> "$$STEAMDIR/RealRTCW.sh"; \
 	chmod +x "$$STEAMDIR/RealRTCW.sh"; \
 	echo '#!/bin/bash' > "$$STEAMDIR/start_native.sh"; \
@@ -3092,18 +3128,36 @@ install-steam: release
 	echo 'GAME_DIR="$$(cd "$$(dirname "$$0")" && pwd)"' >> "$$STEAMDIR/start_native.sh"; \
 	echo 'cd "$$GAME_DIR"' >> "$$STEAMDIR/start_native.sh"; \
 	echo '' >> "$$STEAMDIR/start_native.sh"; \
-	echo '# Add library paths for LLM libraries' >> "$$STEAMDIR/start_native.sh"; \
-	echo 'export LD_LIBRARY_PATH=".:Main:$$LD_LIBRARY_PATH"' >> "$$STEAMDIR/start_native.sh"; \
+	echo '# Add library paths for LLM and TTS libraries' >> "$$STEAMDIR/start_native.sh"; \
+	echo 'export LD_LIBRARY_PATH=".:Main:Main/tts:$$LD_LIBRARY_PATH"' >> "$$STEAMDIR/start_native.sh"; \
 	echo '' >> "$$STEAMDIR/start_native.sh"; \
 	echo '# Launch the native Linux version' >> "$$STEAMDIR/start_native.sh"; \
 	echo 'exec ./RealRTCW.x86_64 "$$@"' >> "$$STEAMDIR/start_native.sh"; \
 	chmod +x "$$STEAMDIR/start_native.sh"; \
-	echo "Installing renderer..."; \
-	cp -v $(BR)/renderer_sp_opengl1_$(SHLIBNAME) "$$STEAMDIR/renderer_sp_opengl1_$(SHLIBNAME)"; \
-	echo "Installing game modules..."; \
-	cp -v $(BR)/$(BASEGAME)/cgame.sp.$(SHLIBNAME) "$$STEAMDIR/Main/cgame.sp.$(SHLIBNAME)"; \
-	cp -v $(BR)/$(BASEGAME)/qagame.sp.$(SHLIBNAME) "$$STEAMDIR/Main/qagame.sp.$(SHLIBNAME)"; \
-	cp -v $(BR)/$(BASEGAME)/ui.sp.$(SHLIBNAME) "$$STEAMDIR/Main/ui.sp.$(SHLIBNAME)"; \
+	if [ -f "$(BR)/renderer_sp_opengl1_$(SHLIBNAME)" ]; then \
+		echo "Installing renderer..."; \
+		cp -v $(BR)/renderer_sp_opengl1_$(SHLIBNAME) "$$STEAMDIR/renderer_sp_opengl1_$(SHLIBNAME)"; \
+	else \
+		echo "Warning: Renderer not found, skipping..."; \
+	fi; \
+	if [ -f "$(BR)/$(BASEGAME)/cgame.sp.$(SHLIBNAME)" ]; then \
+		echo "Installing game modules..."; \
+		QAGAME_SRC="$(BR)/$(BASEGAME)/qagame.sp.$(SHLIBNAME)"; \
+		QAGAME_DST="$$STEAMDIR/Main/qagame.sp.$(SHLIBNAME)"; \
+		if [ -f "$$QAGAME_SRC" ] && [ -f "$$QAGAME_DST" ]; then \
+			SRC_TIME=$$(stat -c %Y "$$QAGAME_SRC" 2>/dev/null || stat -f %m "$$QAGAME_SRC" 2>/dev/null || echo 0); \
+			DST_TIME=$$(stat -c %Y "$$QAGAME_DST" 2>/dev/null || stat -f %m "$$QAGAME_DST" 2>/dev/null || echo 0); \
+			if [ $$SRC_TIME -le $$DST_TIME ]; then \
+				echo "  WARNING: qagame.sp.$(SHLIBNAME) installed version is newer or same!"; \
+			fi; \
+		fi; \
+		cp -v $(BR)/$(BASEGAME)/cgame.sp.$(SHLIBNAME) "$$STEAMDIR/Main/cgame.sp.$(SHLIBNAME)"; \
+		cp -v $(BR)/$(BASEGAME)/qagame.sp.$(SHLIBNAME) "$$STEAMDIR/Main/qagame.sp.$(SHLIBNAME)"; \
+		cp -v $(BR)/$(BASEGAME)/ui.sp.$(SHLIBNAME) "$$STEAMDIR/Main/ui.sp.$(SHLIBNAME)"; \
+		echo "✓ Game modules installed"; \
+	else \
+		echo "Warning: Game modules not found, skipping..."; \
+	fi; \
 	echo "Installing LLM libraries..."; \
 	if [ -f "$(CURDIR)/code/llama.cpp/build/bin/libllama.so" ]; then \
 		cp -v $(CURDIR)/code/llama.cpp/build/bin/libllama.so* "$$STEAMDIR/"; \
@@ -3127,7 +3181,90 @@ install-steam: release
 	else \
 		echo "Warning: LLM libraries not found, skipping..."; \
 	fi; \
+	echo "Installing TTS system..."; \
+	if [ -d "$(CURDIR)/main/tts" ]; then \
+		mkdir -p "$$STEAMDIR/Main/tts"; \
+		mkdir -p "$$STEAMDIR/Main/tts/cache"; \
+		if [ -f "$(CURDIR)/main/tts/piper" ]; then \
+			cp -v $(CURDIR)/main/tts/piper "$$STEAMDIR/Main/tts/"; \
+			chmod +x "$$STEAMDIR/Main/tts/piper"; \
+		fi; \
+		if [ -f "$(CURDIR)/main/tts/de_DE-thorsten_emotional-medium.onnx" ]; then \
+			cp -v $(CURDIR)/main/tts/de_DE-thorsten_emotional-medium.onnx "$$STEAMDIR/Main/tts/"; \
+		fi; \
+		if [ -f "$(CURDIR)/main/tts/de_DE-thorsten_emotional-medium.onnx.json" ]; then \
+			cp -v $(CURDIR)/main/tts/de_DE-thorsten_emotional-medium.onnx.json "$$STEAMDIR/Main/tts/"; \
+		fi; \
+		# Copy TTS shared libraries \
+		if [ -f "$(CURDIR)/main/tts/libpiper_phonemize.so" ]; then \
+			cp -v $(CURDIR)/main/tts/lib*.so* "$$STEAMDIR/Main/tts/" 2>/dev/null || true; \
+		fi; \
+		if [ -d "$(CURDIR)/main/tts/espeak-ng-data" ]; then \
+			cp -rv $(CURDIR)/main/tts/espeak-ng-data "$$STEAMDIR/Main/tts/" 2>/dev/null || true; \
+		fi; \
+		if [ -f "$(CURDIR)/main/tts/espeak-ng" ]; then \
+			cp -v $(CURDIR)/main/tts/espeak-ng "$$STEAMDIR/Main/tts/" 2>/dev/null || true; \
+			chmod +x "$$STEAMDIR/Main/tts/espeak-ng" 2>/dev/null || true; \
+		fi; \
+		if [ -f "$(CURDIR)/main/tts/piper_phonemize" ]; then \
+			cp -v $(CURDIR)/main/tts/piper_phonemize "$$STEAMDIR/Main/tts/" 2>/dev/null || true; \
+			chmod +x "$$STEAMDIR/Main/tts/piper_phonemize" 2>/dev/null || true; \
+		fi; \
+		echo "TTS system installed to Main/tts/"; \
+	else \
+		echo "Warning: TTS directory not found. Run 'make setup-tts' first."; \
+	fi; \
+	echo "Installing LLM models (if present)..."; \
+	if [ -d "$(CURDIR)/main/models" ] && [ -n "$$(ls -A $(CURDIR)/main/models 2>/dev/null)" ]; then \
+		mkdir -p "$$STEAMDIR/Main/models"; \
+		cp -rv $(CURDIR)/main/models/* "$$STEAMDIR/Main/models/" 2>/dev/null || true; \
+		echo "LLM models installed to Main/models/"; \
+	else \
+		echo "Note: LLM models directory not found. Place your model files in main/models/ and run 'make install-steam' again."; \
+	fi; \
 	echo "Installation complete!"
+
+install-tts-only:
+	@echo "Installing TTS system to Steam directory (standalone)..."
+	@STEAMDIR="$(HOME)/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/RealRTCW"; \
+	if [ ! -d "$$STEAMDIR" ]; then \
+		echo "Error: Steam directory not found at $$STEAMDIR"; \
+		exit 1; \
+	fi; \
+	echo "Installing TTS system..."; \
+	if [ -d "$(CURDIR)/main/tts" ]; then \
+		mkdir -p "$$STEAMDIR/Main/tts"; \
+		mkdir -p "$$STEAMDIR/Main/tts/cache"; \
+		if [ -f "$(CURDIR)/main/tts/piper" ]; then \
+			cp -v $(CURDIR)/main/tts/piper "$$STEAMDIR/Main/tts/"; \
+			chmod +x "$$STEAMDIR/Main/tts/piper"; \
+		fi; \
+		if [ -f "$(CURDIR)/main/tts/de_DE-thorsten_emotional-medium.onnx" ]; then \
+			cp -v $(CURDIR)/main/tts/de_DE-thorsten_emotional-medium.onnx "$$STEAMDIR/Main/tts/"; \
+		fi; \
+		if [ -f "$(CURDIR)/main/tts/de_DE-thorsten_emotional-medium.onnx.json" ]; then \
+			cp -v $(CURDIR)/main/tts/de_DE-thorsten_emotional-medium.onnx.json "$$STEAMDIR/Main/tts/"; \
+		fi; \
+		if [ -f "$(CURDIR)/main/tts/libpiper_phonemize.so" ]; then \
+			cp -v $(CURDIR)/main/tts/lib*.so* "$$STEAMDIR/Main/tts/" 2>/dev/null || true; \
+		fi; \
+		if [ -d "$(CURDIR)/main/tts/espeak-ng-data" ]; then \
+			cp -rv $(CURDIR)/main/tts/espeak-ng-data "$$STEAMDIR/Main/tts/" 2>/dev/null || true; \
+		fi; \
+		if [ -f "$(CURDIR)/main/tts/espeak-ng" ]; then \
+			cp -v $(CURDIR)/main/tts/espeak-ng "$$STEAMDIR/Main/tts/" 2>/dev/null || true; \
+			chmod +x "$$STEAMDIR/Main/tts/espeak-ng" 2>/dev/null || true; \
+		fi; \
+		if [ -f "$(CURDIR)/main/tts/piper_phonemize" ]; then \
+			cp -v $(CURDIR)/main/tts/piper_phonemize "$$STEAMDIR/Main/tts/" 2>/dev/null || true; \
+			chmod +x "$$STEAMDIR/Main/tts/piper_phonemize" 2>/dev/null || true; \
+		fi; \
+		echo "TTS system installed to Main/tts/"; \
+	else \
+		echo "Warning: TTS directory not found. Run 'make setup-tts' first."; \
+		exit 1; \
+	fi; \
+	echo "TTS installation complete!"
 
 copyfiles: release
 	@if [ ! -d $(COPYDIR)/$(BASEGAME) ]; then echo "You need to set COPYDIR to where your RTCW data is!"; fi
@@ -3198,6 +3335,26 @@ dist:
 	git archive --format zip --output $(CLIENTBIN)-$(VERSION).zip HEAD
 
 #############################################################################
+# TTS SETUP
+#############################################################################
+
+setup-tts:
+	@echo "Setting up TTS system..."
+	@./setup-tts.sh
+
+test-tts: test_tts test_tts_full
+	@echo "Running TTS functionality tests..."
+	@./test_tts
+	@echo ""
+	@./test_tts_full
+
+test_tts: test_tts.c
+	@gcc -o test_tts test_tts.c -Wall -Wextra
+
+test_tts_full: test_tts_full.c
+	@gcc -o test_tts_full test_tts_full.c -Wall -Wextra
+
+#############################################################################
 # DEPENDENCIES
 #############################################################################
 
@@ -3208,8 +3365,8 @@ ifneq ($(B),)
 endif
 
 .PHONY: all clean clean2 clean-debug clean-release copyfiles \
-	debug default dist distclean install-steam makedirs \
-	release targets \
+	debug default dist distclean install-steam install-tts-only makedirs \
+	release targets setup-tts test-tts \
 	toolsclean toolsclean2 toolsclean-debug toolsclean-release \
 	$(OBJ_D_FILES) $(TOOLSOBJ_D_FILES)
 

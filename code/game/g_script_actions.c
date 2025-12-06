@@ -36,6 +36,7 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "g_local.h"
 #include "../qcommon/q_shared.h"
+#include "g_tts.h"
 
 /*
 Contains the code to handle the various commands available with an event script.
@@ -514,16 +515,28 @@ qboolean G_ScriptAction_Trigger( gentity_t *ent, char *params ) {
 ================
 G_ScriptAction_PlaySound
 
-  syntax: playsound <soundname OR scriptname> [LOOPING]
+  syntax: playsound <soundname OR scriptname> [LOOPING] [voice_mode tts] [voice_tts_text "text"] [voice_tts_shout 1]
 
   Currently only allows playing on the VOICE channel, unless you use a sound script.
 
   Use the optional LOOPING paramater to attach the sound to the entities looping channel.
+  
+  TTS support:
+  - voice_mode: "wav" (default) or "tts"
+  - voice_tts_text: German text to synthesize
+  - voice_tts_shout: "1" for combat/shout lines (louder, higher pitch)
 ================
 */
 qboolean G_ScriptAction_PlaySound( gentity_t *ent, char *params ) {
 	char *pString, *token;
 	char sound[MAX_QPATH];
+	char voice_mode[64] = "wav";
+	char voice_tts_text[MAX_STRING_CHARS] = "";
+	qboolean voice_tts_shout = qfalse;
+	qboolean looping = qfalse;
+	tts_voice_params_t tts_params;
+	tts_audio_buffer_t *tts_audio = NULL;
+	qboolean use_tts = qfalse;
 
 	if ( !params ) {
 		G_Error( "G_Scripting: syntax error\n\nplaysound <soundname OR scriptname>\n" );
@@ -533,11 +546,84 @@ qboolean G_ScriptAction_PlaySound( gentity_t *ent, char *params ) {
 	token = COM_ParseExt( &pString, qfalse );
 	Q_strncpyz( sound, token, sizeof( sound ) );
 
-	token = COM_ParseExt( &pString, qfalse );
-	if ( !token[0] || Q_strcasecmp( token, "looping" ) ) {
-		G_AddEvent( ent, EV_GENERAL_SOUND, G_SoundIndex( sound ) );
-	} else {    // looping channel
-		ent->s.loopSound = G_SoundIndex( sound );
+	// Parse additional parameters
+	while ( ( token = COM_ParseExt( &pString, qfalse ) ) && token[0] ) {
+		if ( !Q_stricmp( token, "looping" ) ) {
+			looping = qtrue;
+		} else if ( !Q_stricmp( token, "voice_mode" ) ) {
+			token = COM_ParseExt( &pString, qfalse );
+			if ( token[0] ) {
+				Q_strncpyz( voice_mode, token, sizeof( voice_mode ) );
+			}
+		} else if ( !Q_stricmp( token, "voice_tts_text" ) ) {
+			token = COM_ParseExt( &pString, qfalse );
+			if ( token[0] ) {
+				Q_strncpyz( voice_tts_text, token, sizeof( voice_tts_text ) );
+			}
+		} else if ( !Q_stricmp( token, "voice_tts_shout" ) ) {
+			token = COM_ParseExt( &pString, qfalse );
+			if ( token[0] && atoi( token ) ) {
+				voice_tts_shout = qtrue;
+			}
+		}
+	}
+
+	// Check if TTS should be used
+	if ( !Q_stricmp( voice_mode, "tts" ) && voice_tts_text[0] && TTS_IsEnabled() ) {
+		use_tts = qtrue;
+		
+		// Setup TTS params
+		TTS_DefaultParams( &tts_params );
+		if ( voice_tts_shout ) {
+			tts_params.gain = 1.2f;
+			tts_params.pitch_shift_semitones = 2.0f;
+			tts_params.shout = qtrue;
+		}
+		
+		// Try to get from cache (synchronous)
+		if ( TTS_LoadFromCache( voice_tts_text, &tts_params, &tts_audio ) ) {
+			// Cache hit - we have audio ready
+			use_tts = qtrue;
+		} else {
+			// Cache miss - queue request (async)
+			// For now, fall back to WAV if not in cache
+			// TODO: Implement proper queuing/waiting for TTS completion
+			if ( g_tts_debug.integer ) {
+				G_Printf( "^3[TTS] TTS requested but not in cache, falling back to WAV: %s\n", sound );
+			}
+			use_tts = qfalse;
+			TTS_Synthesize( voice_tts_text, &tts_params, ent->s.number, NULL );  // Queue for future use
+		}
+	}
+
+	if ( use_tts && tts_audio ) {
+		// Register TTS audio as a sound and play it
+		int tts_sound = TTS_RegisterAudioAsSound( tts_audio, voice_tts_text );
+		if ( tts_sound > 0 ) {
+			if ( !looping ) {
+				G_AddEvent( ent, EV_GENERAL_SOUND, tts_sound );
+			} else {
+				ent->s.loopSound = tts_sound;
+			}
+			TTS_FreeAudioBuffer( tts_audio );
+			return qtrue;
+		} else {
+			// Registration failed, fall back to WAV
+			if ( g_tts_debug.integer ) {
+				G_Printf( "^3[TTS] Failed to register TTS audio, using WAV fallback\n" );
+			}
+			TTS_FreeAudioBuffer( tts_audio );
+			use_tts = qfalse;
+		}
+	}
+
+	// Fall back to WAV if TTS not available or failed
+	if ( !use_tts ) {
+		if ( !looping ) {
+			G_AddEvent( ent, EV_GENERAL_SOUND, G_SoundIndex( sound ) );
+		} else {
+			ent->s.loopSound = G_SoundIndex( sound );
+		}
 	}
 
 	return qtrue;

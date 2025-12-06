@@ -30,6 +30,9 @@ If you have questions concerning this license or the applicable additional terms
 
 // g_local.h -- local definitions for game module
 
+#ifndef __G_LOCAL_H__
+#define __G_LOCAL_H__
+
 #include "../qcommon/q_shared.h"
 #include "bg_public.h"
 #include "g_public.h"
@@ -1156,7 +1159,18 @@ extern vmCvar_t g_dlc1;
 extern vmCvar_t g_class;
 extern vmCvar_t g_noobTube;
 extern vmCvar_t g_aiCollision;    
-extern vmCvar_t g_level_was_selected;  
+extern vmCvar_t g_level_was_selected;
+
+// TTS Integration CVARs
+extern vmCvar_t g_tts_enable;
+extern vmCvar_t g_tts_mode;
+extern vmCvar_t g_tts_cache_persist;
+extern vmCvar_t g_tts_volume;
+extern vmCvar_t g_tts_piper_path;
+extern vmCvar_t g_tts_model_path;
+extern vmCvar_t g_tts_model_config_path;
+extern vmCvar_t g_tts_timeout;
+extern vmCvar_t g_tts_debug;  
 
 extern vmCvar_t g_playerSurvivalClass;
 
@@ -1498,3 +1512,4 @@ typedef enum
 	shard_ceramic,
 	shard_rubble
 } shards_t;
+#endif // __G_LOCAL_H__

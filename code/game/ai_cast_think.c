@@ -35,6 +35,7 @@ If you have questions concerning this license or the applicable additional terms
 //===========================================================================
 
 #include "g_local.h"
+#include "g_tts.h"
 #include "../qcommon/q_shared.h"
 #include "../botlib/botlib.h"      //bot lib interface
 #include "../botlib/be_aas.h"
@@ -48,6 +49,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "ai_llm.h"
 #include "ai_tactical_memory.h"
 #include "ai_squad.h"
+#include "g_tts.h"
 #include "ai_strategy.h"
 
 /*
@@ -613,6 +615,12 @@ void AICast_Think( int client, float thinktime ) {
 
 				AICast_StateChange( cs, AISTATE_RELAXED );
 				cs->enemyNum = -1;
+
+				// Assign to squad on respawn
+				if ( ai_squad_coordination.integer ) {
+					// Trigger squad reassignment to include this entity
+					AICast_AssignSquads();
+				}
 			} else {
 				// can't spawn yet, so set bbox back, and wait
 				ent->r.maxs[2] = oldmaxZ;
@@ -847,6 +855,84 @@ void AICast_Think( int client, float thinktime ) {
 	}
 	
 	//
+	// Tactical Response: React to enemy sightings by nearby squad members
+	if ( ent->aiTeam >= 0 && cs->squadId >= 0 ) {
+		tactical_memory_t *tm = TacticalMemory_GetForTeam( ent->aiTeam );
+		if ( tm && tm->enemyCount > 0 ) {
+			// Check if we have an enemy in tactical memory that we haven't engaged yet
+			if ( cs->enemyNum < 0 || cs->aiState < AISTATE_COMBAT ) {
+				// Look for recently spotted enemies (within last 3 seconds)
+				int i;
+				for ( i = 0; i < MAX_TACTICAL_ENEMIES; i++ ) {
+					tactical_enemy_info_t *enemyInfo = &tm->enemies[i];
+					if ( enemyInfo->entityNum < 0 ) continue; // Not active
+					
+					// Check if enemy was spotted recently (within 3 seconds)
+					int timeSinceSpotted = level.time - enemyInfo->lastSeenTime;
+					if ( timeSinceSpotted > 3000 ) continue; // Too old
+					
+					// Check if this enemy is nearby (within 1500 units)
+					vec3_t diff;
+					VectorSubtract( enemyInfo->position, ent->r.currentOrigin, diff );
+					float dist = VectorLength( diff );
+					if ( dist > 1500.0f ) continue; // Too far
+					
+					// Check if we can see this enemy now
+					gentity_t *enemyEnt = &g_entities[enemyInfo->entityNum];
+					if ( enemyEnt->inuse && AICast_EntityVisible( cs, enemyInfo->entityNum, qtrue ) ) {
+						// We can see the enemy - engage immediately
+						if ( cs->enemyNum != enemyInfo->entityNum ) {
+							cs->enemyNum = enemyInfo->entityNum;
+							if ( cs->aiState < AISTATE_COMBAT ) {
+								AICast_StateChange( cs, AISTATE_COMBAT );
+							}
+							// Take cover and engage
+							if ( AICast_GetTakeCoverPos( cs, enemyInfo->entityNum, enemyInfo->position, cs->takeCoverPos ) ) {
+								cs->takeCoverTime = level.time + 2000 + rand() % 2000;
+								if ( ai_llm_debug.integer >= 2 ) {
+									G_Printf( "^3[TACTICAL] %s reacting to enemy spotted by teammate, taking cover\n", ent->aiName );
+								}
+							}
+						}
+						break; // Found and engaged enemy
+					} else if ( dist < 800.0f && timeSinceSpotted < 2000 ) {
+						// Enemy is nearby but not visible - move to engage position and take cover
+						// Only do this if we're not already in combat with someone else
+						if ( cs->enemyNum < 0 && cs->aiState < AISTATE_COMBAT ) {
+							// Set enemy from tactical memory
+							cs->enemyNum = enemyInfo->entityNum;
+							cs->lastEnemy = enemyInfo->entityNum;
+							
+							// Move to a position where we can engage
+							vec3_t engagePos;
+							VectorCopy( enemyInfo->position, engagePos );
+							
+							// Try to find cover position near enemy
+							if ( AICast_GetTakeCoverPos( cs, enemyInfo->entityNum, enemyInfo->position, cs->takeCoverPos ) ) {
+								cs->takeCoverTime = level.time + 3000 + rand() % 2000;
+								AICast_StateChange( cs, AISTATE_COMBAT );
+								if ( ai_llm_debug.integer >= 2 ) {
+									G_Printf( "^3[TACTICAL] %s moving to engage enemy spotted by teammate (%.0f units away)\n", 
+									         ent->aiName, dist );
+								}
+							} else {
+								// No cover available, but still move toward enemy position
+								if ( cs->bs && cs->bs->inuse ) {
+									VectorCopy( engagePos, cs->bs->teamgoal.origin );
+									cs->bs->teamgoal.entitynum = -1;
+									cs->bs->teamgoal.areanum = BotPointAreaNum( engagePos );
+								}
+								AICast_StateChange( cs, AISTATE_COMBAT );
+							}
+							break; // Reacted to this enemy
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	//
 	// Adaptive Strategy: Periodic evaluation (every 30 seconds)
 	if ( cs->squadRole == SQUAD_ROLE_LEADER && ent->aiTeam >= 0 ) {
 		if ( level.time % 30000 < 100 ) {
@@ -857,16 +943,31 @@ void AICast_Think( int client, float thinktime ) {
 	//
 	// LLM Integration: Request strategic decisions and dialogue periodically
 	if ( LLM_IsReady() && ai_llm_enabled.integer ) {
-		// Strategic decision updates
+		// Strategic decision updates with throttling
 		int strategicInterval = ai_llm_strategic_interval.integer * 1000; // convert to ms
-		if ( strategicInterval > 0 && 
-			 cs->llm_lastStrategicUpdateTime + strategicInterval < level.time &&
-			 !cs->llm_pendingStrategicRequest ) {
-			// Only request decisions for AI in combat or alert states
-			if ( cs->aiState >= AISTATE_ALERT ) {
-				LLM_RequestStrategicDecision( cs );
-				cs->llm_pendingStrategicRequest = qtrue;
-				cs->llm_lastStrategicUpdateTime = level.time;
+		if ( strategicInterval <= 0 ) {
+			strategicInterval = 5000; // Default 5 seconds
+		}
+		
+		// Minimum interval between requests (throttling)
+		int minInterval = 5000; // 5 seconds minimum between requests per entity
+		
+		if ( cs->llm_lastStrategicUpdateTime + minInterval < level.time &&
+			 !cs->llm_pendingStrategicRequest &&
+			 strategicInterval > 0 && 
+			 cs->llm_lastStrategicUpdateTime + strategicInterval < level.time ) {
+			// Only request decisions for AI in combat or alert states with enemies
+			// Skip if entity is dead or not in use
+			if ( ent->health > 0 && ent->inuse && cs->aiState >= AISTATE_ALERT ) {
+				// Additional check: only request if has enemy or is actively engaged
+				if ( cs->enemyNum >= 0 || cs->aiState >= AISTATE_COMBAT ) {
+					// Check if queue has space (LLM_RequestStrategicDecision checks this too)
+					if ( !LLM_HasPendingDecision( cs->entityNum ) ) {
+						LLM_RequestStrategicDecision( cs );
+						cs->llm_pendingStrategicRequest = qtrue;
+						cs->llm_lastStrategicUpdateTime = level.time;
+					}
+				}
 			}
 		}
 		
@@ -939,11 +1040,51 @@ void AICast_Think( int client, float thinktime ) {
 			if ( LLM_GetDialogue( cs->entityNum, &dialogue ) ) {
 				cs->llm_pendingDialogueRequest = qfalse;
 				if ( dialogue.shouldSpeak && dialogue.text[0] ) {
+					// Validate dialogue text - don't synthesize if it looks like raw JSON
+					qboolean isValidDialogue = qtrue;
+					if ( dialogue.text[0] == '{' || strstr( dialogue.text, "\"dialogue\"" ) != NULL || strstr( dialogue.text, "\"priority\"" ) != NULL ) {
+						// This looks like raw JSON, not parsed dialogue - skip TTS to prevent crash
+						if ( ai_llm_debug.integer >= 1 ) {
+							G_Printf( "LLM Dialogue [%s]: Skipping TTS - text appears to be raw JSON: %.100s\n", ent->aiName, dialogue.text );
+						}
+						isValidDialogue = qfalse;
+					}
+					
 					// Display the dialogue
 					trap_SendServerCommand( -1, va( "cp \"[%s]: %s\"", ent->aiName, dialogue.text ) );
 					if ( ai_llm_debug.integer ) {
 						G_Printf( "LLM Dialogue [%s]: %s\n", ent->aiName, dialogue.text );
 					}
+					
+					// Synthesize speech using TTS if enabled and dialogue is valid
+					if ( isValidDialogue && TTS_IsEnabled() ) {
+						if ( ai_llm_debug.integer ) {
+							G_Printf( "LLM TTS: Attempting synthesis for %s: %s\n", ent->aiName, dialogue.text );
+						}
+						tts_voice_params_t params;
+						tts_audio_buffer_t *dummy_audio = NULL;
+						TTS_DefaultParams( &params );
+						// Adjust parameters based on priority (higher priority = louder/more urgent)
+						if ( dialogue.priority >= 8 ) {
+							params.shout = qtrue;
+							params.gain = 1.2f;
+						} else if ( dialogue.priority >= 6 ) {
+							params.gain = 1.1f;
+						}
+						// Check for exclamation marks to add emphasis
+						if ( strchr( dialogue.text, '!' ) ) {
+							params.shout = qtrue;
+						}
+						
+						if ( TTS_Synthesize( dialogue.text, &params, cs->entityNum, &dummy_audio ) ) {
+							if ( ai_llm_debug.integer ) {
+								G_Printf( "LLM TTS: Synthesizing dialogue for %s\n", ent->aiName );
+							}
+						} else if ( ai_llm_debug.integer ) {
+							G_Printf( "LLM TTS: Failed to queue synthesis for %s\n", ent->aiName );
+						}
+					}
+					
 					// Prevent dialogue spam
 					cs->llm_nextDialogueAllowedTime = level.time + 3000 + ( rand() % 2000 );
 				}
@@ -1158,12 +1299,14 @@ void AICast_StartFrame( int time ) {
 	if ( ai_squad_coordination.integer ) {
 		static qboolean squadsAssigned = qfalse;
 		static int squadAssignmentTime = 0;
+		static int lastPeriodicAssignment = 0;
 		
 		// Wait a few seconds after level start to let NPCs spawn
 		if ( !squadsAssigned && time > squadAssignmentTime + 3000 ) {
 			if ( numcast > 0 ) {
 				AICast_AssignSquads();
 				squadsAssigned = qtrue;
+				lastPeriodicAssignment = time;
 				G_Printf( "Squad assignment completed (delayed for NPC spawning)\n" );
 			} else {
 				// Try again in 1 second
@@ -1171,10 +1314,69 @@ void AICast_StartFrame( int time ) {
 			}
 		}
 		
+		// Periodic reassignment - reduced frequency to prevent spam
+		// Only reassign if there are significant changes (casualties, new NPCs)
+		static int lastNPCCount = 0;
+		static int lastReassignmentTime = 0;
+		static int reassignmentDebounce = 0; // Debounce counter
+		int currentNPCCount = 0;
+		int i;
+		for (i = 0; i < numcast; i++) {
+			if (caststates[i].entityNum >= 0 && caststates[i].entityNum < MAX_GENTITIES) {
+				gentity_t *ent = &g_entities[caststates[i].entityNum];
+				if (ent->inuse && (ent->r.svFlags & SVF_CASTAI)) {
+					currentNPCCount++;
+				}
+			}
+		}
+		
+		// Debounce: prevent reassignment if called too recently (within 5 seconds)
+		int timeSinceLastReassignment = time - lastReassignmentTime;
+		if (timeSinceLastReassignment < 5000) {
+			reassignmentDebounce++;
+			// Update count but don't reassign
+			if (squadsAssigned) {
+				lastNPCCount = currentNPCCount;
+			}
+			// Skip reassignment if debounced
+		} else {
+			reassignmentDebounce = 0; // Reset debounce counter
+			
+			// Only reassign if NPC count changed significantly (more than 1) or enough time passed (30 seconds)
+			int npcCountDelta = abs(currentNPCCount - lastNPCCount);
+			if ( squadsAssigned && (time > lastPeriodicAssignment + 30000 || npcCountDelta > 1) ) {
+				// Significant change: count changed by more than 1 (casualty or new spawn)
+				if ( numcast > 0 && npcCountDelta > 1 ) {
+					if ( ai_llm_debug.integer >= 2 ) {
+						G_Printf( "Squad reassignment triggered: NPC count changed significantly (%d -> %d)\n", 
+						         lastNPCCount, currentNPCCount );
+					}
+					AICast_AssignSquads();
+					lastPeriodicAssignment = time;
+					lastReassignmentTime = time;
+					lastNPCCount = currentNPCCount;
+				} else if ( time > lastPeriodicAssignment + 60000 ) {
+					// Force reassignment every 60 seconds even if count unchanged (reduced from 20)
+					if ( numcast > 0 ) {
+						if ( ai_llm_debug.integer >= 2 ) {
+							G_Printf( "Squad reassignment: Periodic check (60s interval)\n" );
+						}
+						AICast_AssignSquads();
+						lastPeriodicAssignment = time;
+						lastReassignmentTime = time;
+						lastNPCCount = currentNPCCount;
+					}
+				}
+			} else if ( squadsAssigned ) {
+				lastNPCCount = currentNPCCount; // Update count even if not reassigning
+			}
+		}
+		
 		// Reset on new level
 		if ( time < 100 ) {
 			squadsAssigned = qfalse;
 			squadAssignmentTime = 0;
+			lastPeriodicAssignment = 0;
 		}
 	}
 	//

@@ -387,9 +387,13 @@ void R_AddMDCSurfaces( trRefEntity_t *ent ) {
 		 || ( ent->e.frame < 0 )
 		 || ( ent->e.oldframe >= tr.currentModel->mdc[0]->numFrames )
 		 || ( ent->e.oldframe < 0 ) ) {
-		ri.Printf( PRINT_DEVELOPER, "R_AddMDCSurfaces: no such frame %d to %d for '%s'\n",
-				   ent->e.oldframe, ent->e.frame,
-				   tr.currentModel->name );
+		static int warnCount = 0;
+		if ( warnCount < 5 ) {
+			ri.Printf( PRINT_WARNING, "R_AddMDCSurfaces: no such frame %d to %d for '%s'\n",
+					   ent->e.oldframe, ent->e.frame,
+					   tr.currentModel->name );
+			warnCount++;
+		}
 		ent->e.frame = 0;
 		ent->e.oldframe = 0;
 	}

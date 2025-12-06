@@ -179,6 +179,10 @@ bot_moveresult_t *AICast_MoveToPos( cast_state_t *cs, vec3_t pos, int entnum ) {
 	}
 	//
 	bs = cs->bs;
+	// Validate bot state and move state handle
+	if ( !bs || !bs->inuse || bs->ms == 0 ) {
+		return NULL;
+	}
 	tfl = cs->travelflags;
 	//if in lava or slime the bot should be able to get out
 	if ( BotInLava( bs ) ) {
@@ -216,24 +220,38 @@ bot_moveresult_t *AICast_MoveToPos( cast_state_t *cs, vec3_t pos, int entnum ) {
 	//
 	//initialize the movement state
 	BotSetupForMovement( bs );
+	// Validate move state handle again after setup
+	if ( bs->ms == 0 ) {
+		return NULL;
+	}
 	//if this is a slow moving creature, don't use avoidreach
 	if ( cs->attributes[RUNNING_SPEED] < 100 ) {
 		//reset the avoid reach, otherwise bot is stuck in current area
-		trap_BotResetAvoidReach( bs->ms );
+		if ( bs->ms > 0 ) {
+			trap_BotResetAvoidReach( bs->ms );
+		}
 	} else if ( !VectorCompare( cs->lastMoveToPosGoalOrg, pos ) ) {
 		//reset the avoid reach, otherwise bot is stuck in current area
-		trap_BotResetAvoidReach( bs->ms );
+		if ( bs->ms > 0 ) {
+			trap_BotResetAvoidReach( bs->ms );
+		}
 		VectorCopy( pos, cs->lastMoveToPosGoalOrg );
 	}
 	//move towards the goal
 	if ( !( cs->aiFlags & AIFL_EXPLICIT_ROUTING ) || ( entnum < 0 ) || Q_strcasecmp( g_entities[entnum].classname, "ai_marker" ) ) {
 		// use AAS routing
-		trap_BotMoveToGoal( &lmoveresult, bs->ms, &goal, tfl );
+		if ( bs->ms > 0 ) {
+			trap_BotMoveToGoal( &lmoveresult, bs->ms, &goal, tfl );
+		} else {
+			lmoveresult.failure = qtrue;
+		}
 		//if the movement failed
 		if ( lmoveresult.failure ) {
 
 			//reset the avoid reach, otherwise bot is stuck in current area
-			trap_BotResetAvoidReach( bs->ms );
+			if ( bs->ms > 0 ) {
+				trap_BotResetAvoidReach( bs->ms );
+			}
 			//BotAI_Print(PRT_MESSAGE, "movement failure %d\n", lmoveresult.traveltype);
 			// clear all movement
 			trap_EA_Move( cs->entityNum, vec3_origin, 0 );
@@ -711,7 +729,9 @@ char *AIFunc_IdleStart( cast_state_t *cs ) {
 		}
 	}
 	// make sure we don't avoid any areas when we start again
-	trap_BotInitAvoidReach( cs->bs->ms );
+	if ( cs->bs && cs->bs->inuse && cs->bs->ms > 0 ) {
+		trap_BotInitAvoidReach( cs->bs->ms );
+	}
 
 	// randomly choose idle animation
 //----(SA)	try always using the 'casual' stand on spawn and change to crouching one when 'alerted'
@@ -1604,7 +1624,9 @@ AIFunc_ChaseGoalIdleStart()
 */
 char *AIFunc_ChaseGoalIdleStart( cast_state_t *cs, int entitynum, float reachdist ) {
 	// make sure we don't avoid any areas when we start again
-	trap_BotInitAvoidReach( cs->bs->ms );
+	if ( cs->bs && cs->bs->inuse && cs->bs->ms > 0 ) {
+		trap_BotInitAvoidReach( cs->bs->ms );
+	}
 
 	// if we are following someone, always use the default (ready for action) anim
 	if ( entitynum < MAX_CLIENTS ) {
@@ -2492,7 +2514,9 @@ char *AIFunc_BattleAmbush( cast_state_t *cs ) {
 			//if the movement failed
 			if ( moveresult->failure ) {
 				//reset the avoid reach, otherwise bot is stuck in current area
-				trap_BotResetAvoidReach( bs->ms );
+				if ( bs && bs->inuse && bs->ms > 0 ) {
+					trap_BotResetAvoidReach( bs->ms );
+				}
 				// couldn't get there, so stop trying to get there
 				VectorClear( cs->takeCoverPos );
 				dist = 0;
@@ -3500,7 +3524,9 @@ char *AIFunc_BattleTakeCover( cast_state_t *cs ) {
 			//if the movement failed
 			if ( moveresult->failure ) {
 				//reset the avoid reach, otherwise bot is stuck in current area
-				trap_BotResetAvoidReach( bs->ms );
+				if ( bs && bs->inuse && bs->ms > 0 ) {
+					trap_BotResetAvoidReach( bs->ms );
+				}
 				// couldn't get there, so stop trying to get there
 				VectorClear( cs->takeCoverPos );
 				dist = 0;
@@ -4595,7 +4621,9 @@ char *AIFunc_GrenadeKick( cast_state_t *cs ) {
 			//if the movement failed
 			if ( moveresult->failure ) {
 				//reset the avoid reach, otherwise bot is stuck in current area
-				trap_BotResetAvoidReach( bs->ms );
+				if ( bs && bs->inuse && bs->ms > 0 ) {
+					trap_BotResetAvoidReach( bs->ms );
+				}
 				// couldn't get there, so stop trying to get there
 				level.lastGrenadeKick = level.time;
 				return AIFunc_DefaultStart( cs );
@@ -5007,7 +5035,9 @@ char *AIFunc_Battle( cast_state_t *cs ) {
 	//if the movement failed
 	if (moveresult.failure) {
 		//reset the avoid reach, otherwise bot is stuck in current area
-		trap_BotResetAvoidReach(bs->ms);
+		if ( bs && bs->inuse && bs->ms > 0 ) {
+			trap_BotResetAvoidReach(bs->ms);
+		}
 		// reset the combatgoal
 		cs->combatGoalTime = 0;
 	} else if (cs->combatGoalTime > level.time && VectorLength(cs->bs->cur_ps.velocity)) {	// crouch if moving?
@@ -5145,7 +5175,9 @@ char *AIFunc_BattleStart( cast_state_t *cs ) {
 	char *rval;
 	int lastweap;
 	// make sure we don't avoid any areas when we start again
-	trap_BotInitAvoidReach( cs->bs->ms );
+	if ( cs->bs && cs->bs->inuse && cs->bs->ms > 0 ) {
+		trap_BotInitAvoidReach( cs->bs->ms );
+	}
 	// wait some time before taking cover again
 	cs->takeCoverTime = level.time + 300 + rand() % ( 2000 + (int)( 2000.0 * cs->attributes[AGGRESSION] ) );
 	// wait some time before going to a combat spot

@@ -366,7 +366,12 @@ void G_Script_ScriptParse( gentity_t *ent ) {
 				break;
 			}
 			if ( wantName ) {
-				G_Error( "G_Script_ScriptParse(), Error (line %d): '}' found, but not expected.\n", COM_GetCurrentParseLine() );
+				// Make this a warning instead of fatal error - allow game to continue
+				G_Printf( "^3WARNING: G_Script_ScriptParse(), Error (line %d): '}' found, but not expected. Entity: %s (scriptName: %s). Skipping this script.\n", 
+				        COM_GetCurrentParseLine(), ent->targetname ? ent->targetname : "unknown", 
+				        ent->scriptName ? ent->scriptName : "unknown" );
+				// Break out gracefully instead of crashing
+				break;
 			}
 			wantName = qtrue;
 		} else if ( token[0] == '{' )    {

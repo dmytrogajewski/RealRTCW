@@ -183,14 +183,49 @@ float AICast_EvaluateStrategy(int teamNum) {
 	if (totalCasualties > 0) {
 		killRatio = (float)perf->enemyCasualties / (float)totalCasualties;
 		effectiveness += (killRatio - 0.5f);  // +/- 0.5 based on ratio
-	} else if (perf->friendlyCasualties > 0) {
+	} else {
+		// No casualties yet - neutral effectiveness (but slightly positive to avoid constant switching)
+		effectiveness = 0.55f;
+		return effectiveness; // Early return for no-combat situation
+	}
+	
+	// Special handling for edge case: only friendly casualties, no enemy kills
+	if (perf->friendlyCasualties > 0 && perf->enemyCasualties == 0) {
 		// Taking casualties with no enemy kills = very bad
-		effectiveness -= 0.4f;
+		// Base penalty scales with number of casualties, but cap it to leave some minimum effectiveness
+		float casualtyPenalty = 0.2f + (0.05f * (float)perf->friendlyCasualties);
+		if (casualtyPenalty > 0.6f) casualtyPenalty = 0.6f; // Cap at 0.6 to leave at least 0.1 effectiveness
+		effectiveness -= casualtyPenalty;
 	}
 	
 	// Penalty for high friendly casualties regardless of kill ratio
+	// Reduced penalty to prevent effectiveness from going to 0.0f
 	if (perf->friendlyCasualties > 5) {
-		effectiveness -= 0.1f * ((perf->friendlyCasualties - 5) / 5.0f);
+		float highCasualtyPenalty = 0.05f * ((float)(perf->friendlyCasualties - 5) / 5.0f);
+		if (highCasualtyPenalty > 0.2f) highCasualtyPenalty = 0.2f; // Cap penalty to preserve minimum
+		effectiveness -= highCasualtyPenalty;
+	}
+	
+	// Bonus for good kill ratio (more enemy kills than friendly losses)
+	if (perf->enemyCasualties > 0 && perf->friendlyCasualties > 0) {
+		float kdRatio = (float)perf->enemyCasualties / (float)perf->friendlyCasualties;
+		if (kdRatio > 2.0f) {
+			// Dominating - add bonus
+			effectiveness += 0.2f * ((kdRatio - 2.0f) / 3.0f); // Up to +0.2 bonus
+			if (effectiveness > 1.0f) effectiveness = 1.0f;
+		}
+	}
+	
+	// Time-based factors: penalize if survival time is very low
+	if (perf->avgSurvivalTime > 0 && perf->avgSurvivalTime < 5000) {
+		// NPCs dying very quickly (under 5 seconds) = bad strategy
+		float timePenalty = 0.1f * (1.0f - (perf->avgSurvivalTime / 5000.0f));
+		effectiveness -= timePenalty;
+	} else if (perf->avgSurvivalTime > 30000) {
+		// NPCs surviving long (over 30 seconds) = good strategy
+		float timeBonus = 0.1f * ((perf->avgSurvivalTime - 30000.0f) / 30000.0f);
+		if (timeBonus > 0.15f) timeBonus = 0.15f; // Cap bonus
+		effectiveness += timeBonus;
 	}
 	
 	// Calculate engagement success ratio
@@ -207,8 +242,9 @@ float AICast_EvaluateStrategy(int teamNum) {
 		effectiveness += (objectiveRatio - 0.5f) * 0.5f;  // +/- 0.25
 	}
 	
-	// Clamp to valid range
-	if (effectiveness < 0.0f) effectiveness = 0.0f;
+	// Clamp to valid range, but ensure minimum of 0.05f to prevent constant strategy switching
+	// This gives the system a chance to evaluate strategies even in bad situations
+	if (effectiveness < 0.05f) effectiveness = 0.05f;
 	if (effectiveness > 1.0f) effectiveness = 1.0f;
 	
 	perf->strategyEffectiveness = effectiveness;
@@ -255,35 +291,115 @@ battle_strategy_t AICast_SuggestStrategy(int teamNum) {
 		return perf->strategyType;
 	}
 	
-	// If taking heavy casualties, go defensive or retreat
+	// If taking heavy casualties, go defensive or retreat (retreat only as last resort)
 	if (killRatio < 0.5f) {
-		if (perf->friendlyCasualties > 5) {
+		// Retreat should only be considered in truly catastrophic situations:
+		// - Very high casualties (15+)
+		// - Very low effectiveness (< 0.15)
+		// - AND significantly outnumbered (if threat data available)
+		qboolean shouldRetreat = qfalse;
+		if (perf->friendlyCasualties >= 15 && effectiveness < 0.15f) {
+			// Check if we're significantly outnumbered
+			if (threatCount > 0 && tm->friendlyCount > 0) {
+				float forceRatio = (float)threatCount / (float)tm->friendlyCount;
+				if (forceRatio > 2.0f) {
+					// Outnumbered 2:1 or worse - consider retreat
+					shouldRetreat = qtrue;
+				}
+			} else if (perf->friendlyCasualties >= 20) {
+				// No threat data, but extremely high casualties - retreat
+				shouldRetreat = qtrue;
+			}
+		}
+		
+		// Prevent retreat if we just switched to it recently (cooldown)
+		if (shouldRetreat && perf->strategyType == STRATEGY_RETREAT) {
+			// Already retreating - check if we should continue or try defensive
+			int timeSinceRetreat = level.time - perf->strategyChangeTime;
+			if (timeSinceRetreat < 60000) { // Less than 60 seconds
+				// Stay in retreat for at least 60 seconds
+				return STRATEGY_RETREAT;
+			} else if (effectiveness > 0.3f || killRatio > 0.3f) {
+				// Conditions improved significantly, try defensive instead
+				return STRATEGY_DEFENSIVE;
+			}
+			// Still catastrophic, continue retreat
 			return STRATEGY_RETREAT;
+		}
+		
+		// Prevent switching TO retreat too frequently (cooldown after leaving retreat)
+		if (shouldRetreat && perf->strategyType != STRATEGY_RETREAT) {
+			int timeSinceLastRetreat = level.time - perf->strategyChangeTime;
+			// If we just left retreat less than 90 seconds ago, don't go back
+			if (perf->strategyType == STRATEGY_DEFENSIVE && timeSinceLastRetreat < 90000) {
+				// Too soon to retreat again - stay defensive
+				return STRATEGY_DEFENSIVE;
+			}
+			// Catastrophic situation and enough time has passed - retreat
+			return STRATEGY_RETREAT;
+		}
+		
+		// Not catastrophic enough for retreat, but still losing - go defensive
+		if (perf->friendlyCasualties > 3) {
+			// Force defensive if currently not defensive/retreat
+			if (perf->strategyType != STRATEGY_DEFENSIVE && perf->strategyType != STRATEGY_RETREAT) {
+				return STRATEGY_DEFENSIVE;
+			}
+			// Already defensive, try cautious
+			return STRATEGY_CAUTIOUS;
+		}
+		
+		// Light casualties - try cautious or defensive
+		if (perf->strategyType != STRATEGY_DEFENSIVE && perf->strategyType != STRATEGY_CAUTIOUS) {
+			return STRATEGY_CAUTIOUS;
 		}
 		return STRATEGY_DEFENSIVE;
 	}
 	
 	// If dominating, be aggressive
 	if (killRatio > 2.0f && effectiveness > 0.6f) {
-		return STRATEGY_AGGRESSIVE;
+		// Force aggressive if not already
+		if (perf->strategyType != STRATEGY_AGGRESSIVE) {
+			return STRATEGY_AGGRESSIVE;
+		}
+		// Already aggressive, try flanking for variety
+		return STRATEGY_FLANKING;
 	}
 	
 	// If outnumbered significantly, use hit-and-run or flanking
 	if (threatCount > tm->friendlyCount * 1.5f) {
-		return STRATEGY_HIT_AND_RUN;
+		// Force hit-and-run if not already
+		if (perf->strategyType != STRATEGY_HIT_AND_RUN) {
+			return STRATEGY_HIT_AND_RUN;
+		}
+		// Already hit-and-run, try suppression
+		return STRATEGY_SUPPRESSION;
 	}
 	
 	// If even match, use flanking
 	if (threatCount > 0 && threatCount <= tm->friendlyCount * 1.2f) {
-		return STRATEGY_FLANKING;
+		// Force flanking if not already
+		if (perf->strategyType != STRATEGY_FLANKING) {
+			return STRATEGY_FLANKING;
+		}
+		// Already flanking, try cautious
+		return STRATEGY_CAUTIOUS;
 	}
 	
 	// If few enemies, be cautiously aggressive
 	if (threatCount > 0 && threatCount < tm->friendlyCount) {
-		return STRATEGY_CAUTIOUS;
+		// Force cautious if not already
+		if (perf->strategyType != STRATEGY_CAUTIOUS) {
+			return STRATEGY_CAUTIOUS;
+		}
+		// Already cautious, try aggressive
+		return STRATEGY_AGGRESSIVE;
 	}
 	
-	// Default to defensive
+	// Default to defensive, but try to change if already defensive
+	if (perf->strategyType == STRATEGY_DEFENSIVE) {
+		return STRATEGY_CAUTIOUS; // Try cautious as alternative
+	}
 	return STRATEGY_DEFENSIVE;
 }
 
@@ -402,17 +518,31 @@ void AICast_AdaptStrategy(int teamNum) {
 	        perf->enemyCasualties, perf->friendlyCasualties);
 	
 	// Emergency adaptation for catastrophic performance
+	// Only trigger emergency for truly severe situations
 	qboolean emergency = qfalse;
-	if (effectiveness < 0.2f || (perf->friendlyCasualties > 0 && perf->enemyCasualties == 0 && perf->friendlyCasualties >= 3)) {
+	if (effectiveness < 0.15f && perf->friendlyCasualties >= 10) {
+		// Very low effectiveness AND high casualties
 		emergency = qtrue;
-		G_Printf("^1[STRATEGY EMERGENCY] Team %d: Catastrophic performance detected!\n", teamNum);
+		G_Printf("^1[STRATEGY EMERGENCY] Team %d: Catastrophic performance detected! (Effectiveness: %.2f, Casualties: %d)\n", 
+		        teamNum, effectiveness, perf->friendlyCasualties);
+	} else if (perf->friendlyCasualties > 0 && perf->enemyCasualties == 0 && perf->friendlyCasualties >= 10) {
+		// No enemy kills but 10+ friendly casualties - severe situation
+		emergency = qtrue;
+		G_Printf("^1[STRATEGY EMERGENCY] Team %d: Catastrophic performance detected! (No enemy kills, %d friendly casualties)\n", 
+		        teamNum, perf->friendlyCasualties);
 	}
 	
-	// If strategy is failing or neutral, consider adaptation (raised from 0.4 to 0.5)
-	if (effectiveness < 0.5f || emergency) {
+	// If strategy is failing or neutral, consider adaptation
+	// Add cooldown to prevent constant switching (must wait at least 45 seconds between changes)
+	int timeSinceLastChange = level.time - perf->strategyChangeTime;
+	qboolean canChange = (timeSinceLastChange >= 45000) || emergency;
+	
+	// Only adapt if effectiveness is truly low (< 0.3) or emergency, and cooldown has passed
+	if ((effectiveness < 0.3f || emergency) && canChange) {
 		suggested = AICast_SuggestStrategy(teamNum);
 		
-		if (suggested != perf->strategyType || emergency) {
+		// Only log and apply if strategy actually changes (or emergency forces change)
+		if (suggested != perf->strategyType) {
 			if (emergency) {
 				G_Printf("^1[STRATEGY ADAPT] Team %d: EMERGENCY! Changing from %s to %s (%.2f effectiveness)\n",
 				        teamNum,
@@ -431,6 +561,10 @@ void AICast_AdaptStrategy(int teamNum) {
 			// Reset some metrics for fresh evaluation of new strategy
 			perf->successfulEngagements = 0;
 			perf->failedEngagements = 0;
+		} else if (emergency) {
+			// Emergency but same strategy suggested - log warning
+			G_Printf("^3[STRATEGY ADAPT] Team %d: EMERGENCY detected but strategy unchanged (%.2f effectiveness, current: %s)\n",
+			        teamNum, effectiveness, AICast_StrategyName(perf->strategyType));
 		}
 	} else if (effectiveness > 0.7f) {
 		G_Printf("^2[STRATEGY] Team %d: Current strategy %s working well (%.2f effectiveness)\n",

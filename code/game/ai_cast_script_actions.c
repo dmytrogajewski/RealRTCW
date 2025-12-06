@@ -43,6 +43,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "../botlib/be_ai_goal.h"
 #include "../botlib/be_ai_move.h"
 #include "../botlib/botai.h"          //bot ai interface
+#include "g_tts.h"
 
 #include "ai_cast.h"
 
@@ -677,17 +678,114 @@ qboolean AICast_ScriptAction_FollowCast( cast_state_t *cs, char *params ) {
 ================
 AICast_ScriptAction_PlaySound
 
-  syntax: playsound <soundname OR scriptname>
+  syntax: playsound <soundname OR scriptname> [voice_mode tts] [voice_tts_text "text"] [voice_tts_shout 1]
 
   Currently only allows playing on the VOICE channel, unless you use a sound script (yay)
+  
+  TTS support:
+  - voice_mode: "wav" (default) or "tts"
+  - voice_tts_text: German text to synthesize
+  - voice_tts_shout: "1" for combat/shout lines (louder, higher pitch)
 ================
 */
 qboolean AICast_ScriptAction_PlaySound( cast_state_t *cs, char *params ) {
+	char *pString, *token;
+	char sound[MAX_QPATH];
+	char voice_mode[64] = "wav";
+	char voice_tts_text[MAX_STRING_CHARS] = "";
+	qboolean voice_tts_shout = qfalse;
+	tts_voice_params_t tts_params;
+	tts_audio_buffer_t *tts_audio = NULL;
+	qboolean use_tts = qfalse;
+	
 	if ( !params ) {
 		G_Error( "AI Scripting: syntax error\n\nplaysound <soundname OR scriptname>\n" );
 	}
-	trap_SendServerCommand( -1, va( "cpst %s", params ) );
-	G_AddEvent( &g_entities[cs->bs->entitynum], EV_GENERAL_SOUND, G_SoundIndex( params ) );
+
+	pString = params;
+	token = COM_ParseExt( &pString, qfalse );
+	Q_strncpyz( sound, token, sizeof( sound ) );
+
+	// Parse additional parameters
+	while ( ( token = COM_ParseExt( &pString, qfalse ) ) && token[0] ) {
+		if ( !Q_stricmp( token, "voice_mode" ) ) {
+			token = COM_ParseExt( &pString, qfalse );
+			if ( token[0] ) {
+				Q_strncpyz( voice_mode, token, sizeof( voice_mode ) );
+			}
+		} else if ( !Q_stricmp( token, "voice_tts_text" ) ) {
+			token = COM_ParseExt( &pString, qfalse );
+			if ( token[0] ) {
+				Q_strncpyz( voice_tts_text, token, sizeof( voice_tts_text ) );
+			}
+		} else if ( !Q_stricmp( token, "voice_tts_shout" ) ) {
+			token = COM_ParseExt( &pString, qfalse );
+			if ( token[0] && atoi( token ) ) {
+				voice_tts_shout = qtrue;
+			}
+		}
+	}
+
+	// Check if TTS should be used
+	if ( !Q_stricmp( voice_mode, "tts" ) && voice_tts_text[0] && TTS_IsEnabled() ) {
+		use_tts = qtrue;
+		
+		// Setup TTS params
+		TTS_DefaultParams( &tts_params );
+		if ( voice_tts_shout ) {
+			tts_params.gain = 1.2f;
+			tts_params.pitch_shift_semitones = 2.0f;
+			tts_params.shout = qtrue;
+		}
+		
+		// Try to get from cache (synchronous)
+		if ( TTS_LoadFromCache( voice_tts_text, &tts_params, &tts_audio ) ) {
+			// Cache hit - we have audio ready
+			use_tts = qtrue;
+		} else {
+			// Cache miss - queue request (async)
+			// For now, fall back to WAV if not in cache
+			if ( g_tts_debug.integer ) {
+				G_Printf( "^3[TTS] TTS requested but not in cache, falling back to WAV: %s\n", sound );
+			}
+			use_tts = qfalse;
+			TTS_Synthesize( voice_tts_text, &tts_params, cs->entityNum, NULL );  // Queue for future use
+		}
+	}
+
+	if ( use_tts && tts_audio ) {
+		// Register TTS audio as a sound and play it
+		int tts_sound = TTS_RegisterAudioAsSound( tts_audio, voice_tts_text );
+		if ( tts_sound > 0 ) {
+			trap_SendServerCommand( -1, va( "cpst %s", voice_tts_text ) );
+			G_AddEvent( &g_entities[cs->bs->entitynum], EV_GENERAL_SOUND, tts_sound );
+			TTS_FreeAudioBuffer( tts_audio );
+			// assume we are talking
+			cs->aiFlags |= AIFL_TALKING;
+			// randomly choose idle animation
+			if ( cs->aiFlags & AIFL_STAND_IDLE2 ) {
+				if ( cs->lastEnemy < 0 && cs->aiFlags & AIFL_TALKING ) {
+					g_entities[cs->entityNum].client->ps.eFlags |= EF_STAND_IDLE2;
+				} else {
+					g_entities[cs->entityNum].client->ps.eFlags &= ~EF_STAND_IDLE2;
+				}
+			}
+			return qtrue;
+		} else {
+			// Registration failed, fall back to WAV
+			if ( g_tts_debug.integer ) {
+				G_Printf( "^3[TTS] Failed to register TTS audio, using WAV fallback\n" );
+			}
+			TTS_FreeAudioBuffer( tts_audio );
+			use_tts = qfalse;
+		}
+	}
+
+	// Fall back to WAV if TTS not available or failed
+	if ( !use_tts ) {
+		trap_SendServerCommand( -1, va( "cpst %s", sound ) );
+		G_AddEvent( &g_entities[cs->bs->entitynum], EV_GENERAL_SOUND, G_SoundIndex( sound ) );
+	}
 
 	// assume we are talking
 	cs->aiFlags |= AIFL_TALKING;

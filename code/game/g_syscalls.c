@@ -107,6 +107,14 @@ void    trap_SendConsoleCommand( int exec_when, const char *text ) {
 }
 
 void    trap_Cvar_Register( vmCvar_t *cvar, const char *var_name, const char *value, int flags ) {
+	// Guard against invalid names to avoid crashing the engine
+	if ( !var_name || !var_name[0] || (var_name[0] == '0' && var_name[1] == '\0') ) {
+		if ( cvar ) {
+			cvar->handle = -1;
+			cvar->modificationCount = -1;
+		}
+		return;
+	}
 	syscall( G_CVAR_REGISTER, cvar, var_name, value, flags );
 }
 

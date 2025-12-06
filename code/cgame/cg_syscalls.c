@@ -62,6 +62,14 @@ int     trap_Milliseconds( void ) {
 }
 
 void    trap_Cvar_Register( vmCvar_t *vmCvar, const char *varName, const char *defaultValue, int flags ) {
+	// Guard against invalid names to avoid crashing the engine
+	if ( !varName || !varName[0] || (varName[0] == '0' && varName[1] == '\0') ) {
+		if ( vmCvar ) {
+			vmCvar->handle = -1;
+			vmCvar->modificationCount = -1;
+		}
+		return;
+	}
 	syscall( CG_CVAR_REGISTER, vmCvar, varName, defaultValue, flags );
 }
 

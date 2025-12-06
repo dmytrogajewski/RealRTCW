@@ -807,7 +807,12 @@ void AICast_ScriptParse( cast_state_t *cs ) {
 
 		if ( !token[0] ) {
 			if ( !wantName ) {
-				G_Error( "AICast_ScriptParse(), Error (line %d): '}' expected, end of script found.\n", COM_GetCurrentParseLine() );
+				// Make this a warning instead of fatal error - allow game to continue
+				G_Printf( "^3WARNING: AICast_ScriptParse(), Error (line %d): '}' expected, end of script found. Entity: %s (aiName: %s). Skipping this script.\n", 
+				        COM_GetCurrentParseLine(), ent->targetname ? ent->targetname : "unknown", 
+				        ent->aiName ? ent->aiName : "unknown" );
+				// Break out gracefully instead of crashing
+				break;
 			}
 			break;
 		}
@@ -818,12 +823,22 @@ void AICast_ScriptParse( cast_state_t *cs ) {
 				break;
 			}
 			if ( wantName ) {
-				G_Error( "AICast_ScriptParse(), Error (line %d): '}' found, but not expected.\n", COM_GetCurrentParseLine() );
+				// Make this a warning instead of fatal error - allow game to continue
+				G_Printf( "^3WARNING: AICast_ScriptParse(), Error (line %d): '}' found, but not expected. Entity: %s (aiName: %s). Skipping this script.\n", 
+				        COM_GetCurrentParseLine(), ent->targetname ? ent->targetname : "unknown", 
+				        ent->aiName ? ent->aiName : "unknown" );
+				// Break out gracefully instead of crashing
+				break;
 			}
 			wantName = qtrue;
 		} else if ( token[0] == '{' )    {
 			if ( wantName ) {
-				G_Error( "AICast_ScriptParse(), Error (line %d): '{' found, NAME expected.\n", COM_GetCurrentParseLine() );
+				// Make this a warning instead of fatal error - allow game to continue
+				G_Printf( "^3WARNING: AICast_ScriptParse(), Error (line %d): '{' found, NAME expected. Entity: %s (aiName: %s). Skipping this script.\n", 
+				        COM_GetCurrentParseLine(), ent->targetname ? ent->targetname : "unknown", 
+				        ent->aiName ? ent->aiName : "unknown" );
+				// Break out gracefully instead of crashing
+				break;
 			}
 		} else if ( wantName )   {
 			if ( !Q_strcasecmp( ent->aiName, token ) ) {
@@ -837,12 +852,26 @@ void AICast_ScriptParse( cast_state_t *cs ) {
 				AICast_CheckLevelAttributes( cs, ent, &pScript );
 				continue;
 			}
+			// Store event name for better error messages (before token gets overwritten)
+			char eventNameBuf[64];
+			Q_strncpyz( eventNameBuf, token, sizeof( eventNameBuf ) );
+			
 			eventNum = AICast_EventForString( token );
 			if ( eventNum < 0 ) {
-				G_Error( "AICast_ScriptParse(), Error (line %d): unknown event: %s.\n", COM_GetCurrentParseLine(), token );
+				G_Printf( "^3WARNING: AICast_ScriptParse(), Error (line %d): unknown event: %s. Entity: %s (aiName: %s). Skipping this event.\n", 
+				        COM_GetCurrentParseLine(), eventNameBuf, 
+				        ent->targetname ? ent->targetname : "unknown",
+				        ent->aiName ? ent->aiName : "unknown" );
+				// Skip this event and continue parsing
+				continue;
 			}
 			if ( numEventItems >= MAX_SCRIPT_EVENTS ) {
-				G_Error( "AICast_ScriptParse(), Error (line %d): MAX_SCRIPT_EVENTS reached (%d)\n", COM_GetCurrentParseLine(), MAX_SCRIPT_EVENTS );
+				G_Printf( "^3WARNING: AICast_ScriptParse(), Error (line %d): MAX_SCRIPT_EVENTS reached (%d). Entity: %s (aiName: %s). Skipping remaining events.\n", 
+				        COM_GetCurrentParseLine(), MAX_SCRIPT_EVENTS,
+				        ent->targetname ? ent->targetname : "unknown",
+				        ent->aiName ? ent->aiName : "unknown" );
+				// Break out of event parsing but continue with script
+				break;
 			}
 
 			// if this is a "friendlysightcorpse" event, then disable corpse vis sharing
@@ -858,13 +887,21 @@ void AICast_ScriptParse( cast_state_t *cs ) {
 			while ( ( token = COM_Parse( &pScript ) ) && ( token[0] != '{' ) )
 			{
 				if ( !token[0] ) {
-					G_Error( "AICast_ScriptParse(), Error (line %d): '}' expected, end of script found.\n", COM_GetCurrentParseLine() );
+					G_Printf( "^3WARNING: AICast_ScriptParse(), Error (line %d): '}' expected, end of script found. Entity: %s (aiName: %s), Event: %s. Skipping this event.\n", 
+					        COM_GetCurrentParseLine(), ent->targetname ? ent->targetname : "unknown", 
+					        ent->aiName ? ent->aiName : "unknown", eventNameBuf );
+					// Break out of param parsing, skip this event
+					break;
 				}
 
 				if ( eventNum == 13 ) {   // statechange event, check params
 					if ( strlen( token ) > 1 ) {
 						if ( BG_IndexForString( token, animStateStr, qtrue ) < 0 ) {
-							G_Error( "AICast_ScriptParse(), Error (line %d): unknown state type '%s'.\n", COM_GetCurrentParseLine(), token );
+							G_Printf( "^3WARNING: AICast_ScriptParse(), Error (line %d): unknown state type '%s'. Entity: %s (aiName: %s), Event: %s. Using default state.\n", 
+							        COM_GetCurrentParseLine(), token,
+							        ent->targetname ? ent->targetname : "unknown",
+							        ent->aiName ? ent->aiName : "unknown", eventNameBuf );
+							// Continue with default state instead of crashing
 						}
 					}
 				}
@@ -884,12 +921,25 @@ void AICast_ScriptParse( cast_state_t *cs ) {
 			while ( ( token = COM_Parse( &pScript ) ) && ( token[0] != '}' ) )
 			{
 				if ( !token[0] ) {
-					G_Error( "AICast_ScriptParse(), Error (line %d): '}' expected, end of script found.\n", COM_GetCurrentParseLine() );
+					G_Printf( "^3WARNING: AICast_ScriptParse(), Error (line %d): '}' expected, end of script found. Entity: %s (aiName: %s), Event: %s. Skipping this event.\n", 
+					        COM_GetCurrentParseLine(), ent->targetname ? ent->targetname : "unknown", 
+					        ent->aiName ? ent->aiName : "unknown", eventNameBuf );
+					// Break out of action parsing, skip this event
+					break;
 				}
 
+				// Store action name for better error messages
+				char actionNameBuf[64];
+				Q_strncpyz( actionNameBuf, token, sizeof( actionNameBuf ) );
+				
 				action = AICast_ActionForString( cs, token );
 				if ( !action ) {
-					G_Error( "AICast_ScriptParse(), Error (line %d): unknown action: %s.\n", COM_GetCurrentParseLine(), token );
+					G_Printf( "^3WARNING: AICast_ScriptParse(), Error (line %d): unknown action: %s. Entity: %s (aiName: %s), Event: %s. Skipping this action.\n", 
+					        COM_GetCurrentParseLine(), actionNameBuf,
+					        ent->targetname ? ent->targetname : "unknown",
+					        ent->aiName ? ent->aiName : "unknown", eventNameBuf );
+					// Skip this action and continue with next action
+					continue;
 				}
 
 				curEvent->stack.items[curEvent->stack.numItems].action = action;
@@ -950,7 +1000,12 @@ void AICast_ScriptParse( cast_state_t *cs ) {
 				curEvent->stack.numItems++;
 
 				if ( curEvent->stack.numItems >= AICAST_MAX_SCRIPT_STACK_ITEMS ) {
-					G_Error( "AICast_ScriptParse(): script exceeded MAX_SCRIPT_ITEMS (%d), line %d\n", AICAST_MAX_SCRIPT_STACK_ITEMS, COM_GetCurrentParseLine() );
+					G_Printf( "^3WARNING: AICast_ScriptParse(): script exceeded MAX_SCRIPT_ITEMS (%d), line %d. Entity: %s (aiName: %s), Event: %s. Stopping action parsing for this event.\n", 
+					        AICAST_MAX_SCRIPT_STACK_ITEMS, COM_GetCurrentParseLine(),
+					        ent->targetname ? ent->targetname : "unknown",
+					        ent->aiName ? ent->aiName : "unknown", eventNameBuf );
+					// Break out of action parsing for this event
+					break;
 				}
 			}
 
@@ -961,7 +1016,11 @@ void AICast_ScriptParse( cast_state_t *cs ) {
 			while ( ( token = COM_Parse( &pScript ) ) )
 			{
 				if ( !token[0] ) {
-					G_Error( "AICast_ScriptParse(), Error (line %d): '}' expected, end of script found.\n", COM_GetCurrentParseLine() );
+					G_Printf( "^3WARNING: AICast_ScriptParse(), Error (line %d): '}' expected, end of script found. Entity: %s (aiName: %s). Skipping remaining script.\n", 
+					        COM_GetCurrentParseLine(), ent->targetname ? ent->targetname : "unknown", 
+					        ent->aiName ? ent->aiName : "unknown" );
+					// Break out of bracket matching
+					break;
 				} else if ( token[0] == '{' ) {
 					bracketLevel++;
 				} else if ( token[0] == '}' ) {

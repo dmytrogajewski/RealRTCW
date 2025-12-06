@@ -4742,12 +4742,7 @@ static void UI_RunMenuScript( char **args ) {
 			UI_LoadSavegames( NULL );
 		} else if ( Q_stricmp( name, "Loadgame" ) == 0 ) {
 			int i = UI_SavegameIndexFromName2( ui_savegameName.string );
-			// in developer, don't actually load the game
-			if ( DC->getCVarValue( "developer" ) ) {
-				Com_Printf( "would load game (developer 0):\n   %s\n", uiInfo.savegameList[i].savegameFile );
-			} else {
 				trap_Cmd_ExecuteText( EXEC_APPEND, va( "loadgame %s\n", uiInfo.savegameList[i].savegameFile ) );
-			}
 
 			// save.  throw dialog box if file exists
 		} else if ( Q_stricmp( name, "Savegame" ) == 0 ) {
@@ -7636,7 +7631,15 @@ void UI_RegisterCvars( void ) {
 	cvarTable_t *cv;
 
 	for ( i = 0, cv = cvarTable ; i < cvarTableSize ; i++, cv++ ) {
-		trap_Cvar_Register( cv->vmCvar, cv->cvarName, cv->defaultString, cv->cvarFlags );
+		// Skip entries with NULL or empty cvarName
+		if ( !cv->cvarName || !cv->cvarName[0] ) {
+			Com_Printf( "^3WARNING: UI_RegisterCvars: Skipping entry %d - NULL or empty cvarName\n", i );
+			continue;
+		}
+		// Ensure defaultString is not NULL (use empty string if NULL)
+		const char *defaultValue = cv->defaultString ? cv->defaultString : "";
+		
+		trap_Cvar_Register( cv->vmCvar, cv->cvarName, defaultValue, cv->cvarFlags );
 	}
 }
 
