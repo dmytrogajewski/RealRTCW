@@ -1,25 +1,25 @@
 /*
 ===========================================================================
 
-Return to Castle Wolfenstein multiplayer GPL Source Code
+Return to Castle Wolfenstein single player GPL Source Code
 Copyright (C) 1999-2010 id Software LLC, a ZeniMax Media company. 
 
-This file is part of the Return to Castle Wolfenstein multiplayer GPL Source Code (RTCW MP Source Code).  
+This file is part of the Return to Castle Wolfenstein single player GPL Source Code (RTCW SP Source Code).  
 
-RTCW MP Source Code is free software: you can redistribute it and/or modify
+RTCW SP Source Code is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-RTCW MP Source Code is distributed in the hope that it will be useful,
+RTCW SP Source Code is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with RTCW MP Source Code.  If not, see <http://www.gnu.org/licenses/>.
+along with RTCW SP Source Code.  If not, see <http://www.gnu.org/licenses/>.
 
-In addition, the RTCW MP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW MP Source Code.  If not, please request a copy in writing from id Software at the address below.
+In addition, the RTCW SP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW MP Source Code.  If not, please request a copy in writing from id Software at the address below.
 
 If you have questions concerning this license or the applicable additional terms, you may contact in writing id Software LLC, c/o ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
@@ -324,7 +324,7 @@ static int R_PshadowSurface( msurface_t *surf, int pshadowBits ) {
 R_AddWorldSurface
 ======================
 */
-static void R_AddWorldSurface( msurface_t *surf, shader_t *shader, int dlightBits, int pshadowBits ) {
+static void R_AddWorldSurface( msurface_t *surf, int dlightBits, int pshadowBits ) {
 	// FIXME: bmodel fog?
 
 	// try to cull before dlighting or adding
@@ -344,7 +344,8 @@ static void R_AddWorldSurface( msurface_t *surf, shader_t *shader, int dlightBit
 		pshadowBits = ( pshadowBits != 0 );
 	}
 
-	R_AddDrawSurf( surf->data, shader, surf->fogIndex, dlightBits, pshadowBits, surf->cubemapIndex );
+// GR - not tessellated
+	R_AddDrawSurf( surf->data, surf->shader, surf->fogIndex, dlightBits, pshadowBits, surf->cubemapIndex, ATI_TESS_NONE );
 }
 
 /*
@@ -405,6 +406,47 @@ int R_BmodelFogNum( trRefEntity_t *re, bmodel_t *bmodel ) {
 =================
 R_AddBrushModelSurfaces
 =================
+
+void R_AddBrushModelSurfaces( trRefEntity_t *ent ) {
+	bmodel_t    *bmodel;
+	int clip;
+	model_t     *pModel;
+	int i;
+	int fognum;
+
+	pModel = R_GetModelByHandle( ent->e.hModel );
+
+	bmodel = pModel->bmodel;
+
+	clip = R_CullLocalBox( bmodel->bounds );
+	if ( clip == CULL_OUT ) {
+		return;
+	}
+
+	R_SetupEntityLighting( &tr.refdef, ent );
+	R_DlightBmodel( bmodel );
+
+//----(SA) modified
+	// determine if in fog
+	fognum = R_BmodelFogNum( ent, bmodel );
+
+	for ( i = 0 ; i < bmodel->numSurfaces ; i++ ) {
+		( bmodel->firstSurface + i )->fogIndex = fognum;
+		// Arnout: custom shader support for brushmodels
+		if ( ent->e.customShader ) {
+			R_AddWorldSurface( bmodel->firstSurface + i, R_GetShaderByHandle( ent->e.customShader ), tr.currentEntity->needDlights );
+		} else {
+			R_AddWorldSurface( bmodel->firstSurface + i, ( ( msurface_t * )( bmodel->firstSurface + i ) )->shader, tr.currentEntity->needDlights );
+		}
+	}
+//----(SA) end
+}
+*/
+
+/*
+=================
+R_AddBrushModelSurfaces
+=================
 */
 void R_AddBrushModelSurfaces ( trRefEntity_t *ent ) {
 	bmodel_t	*bmodel;
@@ -436,13 +478,7 @@ void R_AddBrushModelSurfaces ( trRefEntity_t *ent ) {
 		{
 			tr.world->surfacesViewCount[surf] = tr.viewCount;
 			tr.world->surfaces[surf].fogIndex = fognum;
-
-			// Arnout: custom shader support for brushmodels
-			if ( ent->e.customShader ) {
-				R_AddWorldSurface( tr.world->surfaces + surf, R_GetShaderByHandle( ent->e.customShader ), tr.currentEntity->needDlights, 0 );
-			} else {
-				R_AddWorldSurface( tr.world->surfaces + surf, ( ( msurface_t * )( tr.world->surfaces + surf ) )->shader, tr.currentEntity->needDlights, 0 );
-			}
+			R_AddWorldSurface( tr.world->surfaces + surf, tr.currentEntity->needDlights, 0 );
 		}
 	}
 //----(SA) end
@@ -841,7 +877,6 @@ void R_AddWorldSurfaces( void ) {
 	// also mask invisible dlights for next frame
 	{
 		int i;
-		msurface_t *surf;
 
 		tr.refdef.dlightMask = 0;
 
@@ -850,9 +885,7 @@ void R_AddWorldSurfaces( void ) {
 			if (tr.world->surfacesViewCount[i] != tr.viewCount)
 				continue;
 
-			surf = (msurface_t*)tr.world->surfaces + i;
-
-			R_AddWorldSurface( surf, surf->shader, tr.world->surfacesDlightBits[i], tr.world->surfacesPshadowBits[i] );
+			R_AddWorldSurface( tr.world->surfaces + i, tr.world->surfacesDlightBits[i], tr.world->surfacesPshadowBits[i] );
 			tr.refdef.dlightMask |= tr.world->surfacesDlightBits[i];
 		}
 

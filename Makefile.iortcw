@@ -280,7 +280,6 @@ ASMDIR=$(MOUNT_DIR)/asm
 SYSDIR=$(MOUNT_DIR)/sys
 GDIR=$(MOUNT_DIR)/game
 CGDIR=$(MOUNT_DIR)/cgame
-STEAMSHIMDIR=$(MOUNT_DIR)/steamshim
 BLIBDIR=$(MOUNT_DIR)/botlib
 NDIR=$(MOUNT_DIR)/null
 UIDIR=$(MOUNT_DIR)/ui
@@ -720,7 +719,7 @@ ifdef MINGW
 
   ifeq ($(COMPILE_PLATFORM),cygwin)
     TOOLS_BINEXT=.exe
-
+    
     # Under cygwin the default of using gcc for TOOLS_CC won't work, so
     # we need to figure out the appropriate compiler to use, based on the
     # host architecture that we're running under (as tools run on the host)
@@ -1957,7 +1956,7 @@ Q3ROBJ = \
   $(B)/renderer/tr_world.o \
 
 ifeq ($(USE_BLOOM),1)
-  Q3ROBJ += $(B)/renderer/tr_bloom.o
+  Q3ROBJ += $(B)/renderer/tr_bloom.o 
 endif
 
   Q3ROBJ += $(B)/renderer/sdl_gamma.o
@@ -2533,8 +2532,6 @@ Q3CGOBJ_ = \
   $(B)/$(BASEGAME)/cgame/cg_trails.o \
   $(B)/$(BASEGAME)/cgame/cg_view.o \
   $(B)/$(BASEGAME)/cgame/cg_weapons.o \
-  $(B)/$(BASEGAME)/cgame/cg_atmospheric.o \
-  $(B)/$(BASEGAME)/cgame/cg_polybus.o \
   $(B)/$(BASEGAME)/ui/ui_shared.o \
   \
   $(B)/$(BASEGAME)/qcommon/q_math.o \
@@ -2576,8 +2573,6 @@ Q3GOBJ_ = \
   $(B)/$(BASEGAME)/game/ai_cast_script_ents.o \
   $(B)/$(BASEGAME)/game/ai_cast_sight.o \
   $(B)/$(BASEGAME)/game/ai_cast_think.o \
-  $(B)/$(BASEGAME)/game/ai_cast_survival.o \
-  $(B)/$(BASEGAME)/game/ai_cast_func_hein.o \
   $(B)/$(BASEGAME)/game/ai_chat.o \
   $(B)/$(BASEGAME)/game/ai_cmd.o \
   $(B)/$(BASEGAME)/game/ai_dmnet.o \
@@ -2613,15 +2608,6 @@ Q3GOBJ_ = \
   $(B)/$(BASEGAME)/game/g_trigger.o \
   $(B)/$(BASEGAME)/game/g_utils.o \
   $(B)/$(BASEGAME)/game/g_weapon.o \
-  $(B)/$(BASEGAME)/game/g_survival_buy.o \
-  $(B)/$(BASEGAME)/game/g_survival_score.o \
-  $(B)/$(BASEGAME)/game/g_survival_misc.o \
-  $(B)/$(BASEGAME)/game/g_tts.o \
-  $(B)/$(BASEGAME)/game/ai_llm.o \
-  $(B)/$(BASEGAME)/game/ai_tactical_memory.o \
-  $(B)/$(BASEGAME)/game/ai_squad.o \
-  $(B)/$(BASEGAME)/game/ai_strategy.o \
-  $(B)/$(BASEGAME)/game/steamshim_child.o \
   \
   $(B)/$(BASEGAME)/qcommon/q_math.o \
   $(B)/$(BASEGAME)/qcommon/q_shared.o
@@ -2629,16 +2615,14 @@ Q3GOBJ_ = \
 Q3GOBJ = $(Q3GOBJ_) $(B)/$(BASEGAME)/game/g_syscalls.o
 Q3GVMOBJ = $(Q3GOBJ_:%.o=%.asm)
 
-LLAMA_LIBS = -L$(CURDIR)/code/llama.cpp/build/bin -lllama -lggml -lggml-base -lggml-cpu -lpthread -lstdc++
-
 ifdef MINGW
 $(B)/$(BASEGAME)/qagame_sp_$(SHLIBNAME): $(Q3GOBJ)
 	$(echo_cmd) "LD $@"
-	$(Q)$(CXX) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3GOBJ) $(LIBS) $(LLAMA_LIBS)
+	$(Q)$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3GOBJ) $(LIBS)
 else
 $(B)/$(BASEGAME)/qagame.sp.$(SHLIBNAME): $(Q3GOBJ)
 	$(echo_cmd) "LD $@"
-	$(Q)$(CXX) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3GOBJ) $(LIBS) $(LLAMA_LIBS)
+	$(Q)$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3GOBJ) $(LIBS)
 endif
 $(B)/$(BASEGAME)/vm/qagame.sp.qvm: $(Q3GVMOBJ) $(GDIR)/g_syscalls.asm $(Q3ASM)
 	$(echo_cmd) "Q3ASM $@"
@@ -2655,7 +2639,6 @@ Q3UIOBJ_ = \
   $(B)/$(BASEGAME)/ui/ui_gameinfo.o \
   $(B)/$(BASEGAME)/ui/ui_players.o \
   $(B)/$(BASEGAME)/ui/ui_shared.o \
-  $(B)/$(BASEGAME)/ui/ui_graphics_enhancements.o \
   \
   $(B)/$(BASEGAME)/ui/bg_misc.o \
   $(B)/$(BASEGAME)/ui/bg_lib.o \
@@ -2765,7 +2748,7 @@ $(B)/rend2/glsl/%.c: $(R2DIR)/glsl/%.glsl $(STRINGIFY)
 
 $(B)/rend2/glsl/%.o: $(B)/rend2/glsl/%.c
 	$(DO_REF_CC)
-
+	
 $(B)/rend2/%.o: $(R2DIR)/%.c
 	$(DO_REF_CC)
 
@@ -2899,13 +2882,6 @@ $(B)/$(BASEGAME)/cgame/%.asm: $(CGDIR)/%.c $(Q3LCC)
 $(B)/$(BASEGAME)/game/%.o: $(GDIR)/%.c
 	$(DO_GAME_CC)
 
-$(B)/$(BASEGAME)/game/%.o: $(GDIR)/%.cpp
-	$(echo_cmd) "CXX $<"
-	$(Q)$(CXX) $(BASEGAME_CFLAGS) -DGAMEDLL -DQAGAME $(SHLIBCFLAGS) $(CFLAGS) $(OPTIMIZEVM) -std=c++11 -I$(CURDIR)/code/llama.cpp/include -I$(CURDIR)/code/llama.cpp/ggml/include -o $@ -c $<
-
-$(B)/$(BASEGAME)/game/steamshim_child.o: $(STEAMSHIMDIR)/steamshim_child.c
-	$(DO_GAME_CC)
-
 $(B)/$(BASEGAME)/game/%.asm: $(GDIR)/%.c $(Q3LCC)
 	$(DO_GAME_Q3LCC)
 
@@ -2934,7 +2910,7 @@ $(B)/$(BASEGAME)/qcommon/%.asm: $(CMDIR)/%.c $(Q3LCC)
 
 OBJ = $(Q3OBJ) $(Q3ROBJ) $(Q3R2OBJ) $(Q3DOBJ) $(JPGOBJ) $(FTOBJ) \
   $(Q3GOBJ) $(Q3CGOBJ) $(Q3UIOBJ) \
-  $(Q3GVMOBJ) $(Q3CGVMOBJ) $(Q3UIVMOBJ)
+  $(Q3GVMOBJ) $(Q3CGVMOBJ) $(Q3UIVMOBJ) 
 TOOLSOBJ = $(LBURGOBJ) $(Q3CPPOBJ) $(Q3RCCOBJ) $(Q3LCCOBJ) $(Q3ASMOBJ)
 STRINGOBJ = $(Q3R2STRINGOBJ)
 

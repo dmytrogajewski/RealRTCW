@@ -144,7 +144,7 @@ NET
 
 #define MAX_PACKET_USERCMDS     32      // max number of usercmd_t in a packet
 
-#define	MAX_SNAPSHOT_ENTITIES	2048
+#define	MAX_SNAPSHOT_ENTITIES	256
 
 #define PORT_ANY            -1
 
@@ -642,7 +642,7 @@ issues.
 #ifdef DEDICATED
 #	define Q3CONFIG_CFG "wolfconfig_server.cfg"
 #else
-#	define Q3CONFIG_CFG "realrtcwconfig.cfg"
+#	define Q3CONFIG_CFG "wolfconfig.cfg"
 #endif
 
 qboolean FS_Initialized( void );
@@ -675,7 +675,7 @@ qboolean FS_CompareZipChecksum(const char *zipfile);
 int		FS_LoadStack( void );
 
 int     FS_GetFileList(  const char *path, const char *extension, char *listbuf, int bufsize );
-int     FS_GetAddonList(  char *listbuf, int bufsize );
+int     FS_GetModList(  char *listbuf, int bufsize );
 
 void	FS_GetModDescription( const char *modDir, char *description, int descriptionLen );
 
@@ -1105,7 +1105,6 @@ void IN_Frame( void );
 void IN_Shutdown( void );
 void IN_Restart( void );
 
-
 /*
 ==============================================================
 
@@ -1166,9 +1165,9 @@ char    *Sys_Cwd( void );
 char    *Sys_DefaultBasePath( void );
 char    *Sys_DefaultInstallPath( void );
 
-#ifdef STEAM
+#ifndef STANDALONE
 char    *Sys_SteamPath(void);
-char	*Sys_SteamWorkshopPath(void);
+char	*Sys_GogPath(void);
 #endif
 
 #ifdef __APPLE__

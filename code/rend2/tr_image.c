@@ -1,25 +1,25 @@
 /*
 ===========================================================================
 
-Return to Castle Wolfenstein multiplayer GPL Source Code
+Return to Castle Wolfenstein single player GPL Source Code
 Copyright (C) 1999-2010 id Software LLC, a ZeniMax Media company. 
 
-This file is part of the Return to Castle Wolfenstein multiplayer GPL Source Code (RTCW MP Source Code).  
+This file is part of the Return to Castle Wolfenstein single player GPL Source Code (RTCW SP Source Code).  
 
-RTCW MP Source Code is free software: you can redistribute it and/or modify
+RTCW SP Source Code is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-RTCW MP Source Code is distributed in the hope that it will be useful,
+RTCW SP Source Code is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with RTCW MP Source Code.  If not, see <http://www.gnu.org/licenses/>.
+along with RTCW SP Source Code.  If not, see <http://www.gnu.org/licenses/>.
 
-In addition, the RTCW MP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW MP Source Code.  If not, please request a copy in writing from id Software at the address below.
+In addition, the RTCW SP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW SP Source Code.  If not, please request a copy in writing from id Software at the address below.
 
 If you have questions concerning this license or the applicable additional terms, you may contact in writing id Software LLC, c/o ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
@@ -135,11 +135,11 @@ R_SumOfUsedImages
 */
 int R_SumOfUsedImages( void ) {
 	int	total;
-	int i, fc = ( tr.frameCount - 1 );
+	int i;
 
 	total = 0;
 	for ( i = 0; i < tr.numImages; i++ ) {
-		if ( tr.images[i]->frameUsed == fc ) {
+		if ( tr.images[i]->frameUsed == tr.frameCount ) {
 			total += tr.images[i]->uploadWidth * tr.images[i]->uploadHeight;
 		}
 	}
@@ -343,9 +343,6 @@ static void ResampleTexture( byte *in, int inwidth, int inheight, byte *out,
 	int		p1[2048], p2[2048];
 	byte	*pix1, *pix2, *pix3, *pix4;
 
-	if (outwidth>2048)
-		ri.Error(ERR_DROP, "ResampleTexture: max width");
-								
 	fracstep = inwidth*0x10000/outwidth;
 
 	frac = fracstep>>2;
@@ -1538,7 +1535,6 @@ static qboolean RawImage_ScaleToPower2( byte **data, int *inout_width, int *inou
 	qboolean picmip = flags & IMGFLAG_PICMIP;
 	qboolean mipmap = flags & IMGFLAG_MIPMAP;
 	qboolean clampToEdge = flags & IMGFLAG_CLAMPTOEDGE;
-	int effectivePicmip = (flags & IMGFLAG_CHARACTERMIP) ? r_picmip2->integer : r_picmip->integer;
 	qboolean scaled;
 #if 0
 	static int rmse_saved = 0;
@@ -1645,8 +1641,8 @@ static qboolean RawImage_ScaleToPower2( byte **data, int *inout_width, int *inou
 	// perform optional picmip operation
 	//
 	if ( picmip ) {
-		scaled_width >>= effectivePicmip;
-		scaled_height >>= effectivePicmip;
+		scaled_width >>= r_picmip->integer;
+		scaled_height >>= r_picmip->integer;
 	}
 
 	//
@@ -2159,14 +2155,15 @@ static void Upload32(byte *data, int x, int y, int width, int height, GLenum pic
 }
 
 
+//----(SA)	modified
 /*
 ================
-R_CreateImage2
+R_CreateImageExt2
 
 This is the only way any image_t are created
 ================
 */
-image_t *R_CreateImage2( const char *name, byte *pic, int width, int height, GLenum picFormat, int numMips, imgType_t type, imgFlags_t flags, int internalFormat ) {
+image_t *R_CreateImageExt2( const char *name, byte *pic, int width, int height, GLenum picFormat, int numMips, imgType_t type, imgFlags_t flags, int internalFormat, qboolean characterMip ) {
 	byte       *resampledBuffer = NULL;
 	image_t    *image;
 	qboolean    isLightmap = qfalse, scaled = qfalse;
@@ -2177,7 +2174,6 @@ image_t *R_CreateImage2( const char *name, byte *pic, int width, int height, GLe
 	qboolean    cubemap = !!(flags & IMGFLAG_CUBEMAP);
 	qboolean    picmip = !!(flags & IMGFLAG_PICMIP);
 	qboolean    lastMip;
-	int         effectivePicmip = (flags & IMGFLAG_CHARACTERMIP) ? r_picmip2->integer : r_picmip->integer;
 	GLenum textureTarget = cubemap ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
 	GLenum dataFormat;
 
@@ -2221,7 +2217,7 @@ image_t *R_CreateImage2( const char *name, byte *pic, int width, int height, GLe
 			scaled = RawImage_ScaleToPower2(&pic, &width, &height, type, flags, &resampledBuffer);
 		else if (pic && picmip)
 		{
-			for (miplevel = effectivePicmip; miplevel > 0 && numMips > 1; miplevel--, numMips--)
+			for (miplevel = r_picmip->integer; miplevel > 0 && numMips > 1; miplevel--, numMips--)
 			{
 				int size = CalculateMipSize(width, height, picFormat);
 				width = MAX(1, width >> 1);
@@ -2310,19 +2306,19 @@ image_t *R_CreateImage2( const char *name, byte *pic, int width, int height, GLe
 	return image;
 }
 
-
+//----(SA)	modified
 /*
 ================
 R_CreateImage
 
-Wrapper for R_CreateImage2(), for the old parameters.
+Wrapper for R_CreateImageExt2(), for the old parameters.
 ================
 */
 image_t *R_CreateImage(const char *name, byte *pic, int width, int height, imgType_t type, imgFlags_t flags, int internalFormat)
 {
-	return R_CreateImage2(name, pic, width, height, GL_RGBA8, 0, type, flags, internalFormat);
+	return R_CreateImageExt2(name, pic, width, height, GL_RGBA8, 0, type, flags, internalFormat, qfalse);
 }
-
+//----(SA)	end
 
 void R_UpdateSubImage( image_t *image, byte *pic, int x, int y, int width, int height, GLenum picFormat )
 {
@@ -2454,6 +2450,7 @@ void R_LoadImage( const char *name, byte **pic, int *width, int *height, GLenum 
 }
 
 
+//----(SA)	modified
 /*
 ===============
 R_FindImageFile
@@ -2462,7 +2459,7 @@ Finds or loads the given image.
 Returns NULL if it fails, not a default image.
 ==============
 */
-image_t	*R_FindImageFile( const char *name, imgType_t type, imgFlags_t flags )
+image_t	*R_FindImageFileExt( const char *name, imgType_t type, imgFlags_t flags, qboolean characterMIP )
 {
 	image_t	*image;
 	int		width, height;
@@ -2482,11 +2479,14 @@ image_t	*R_FindImageFile( const char *name, imgType_t type, imgFlags_t flags )
 	// see if the image is already loaded
 	//
 	for (image=hashTable[hash]; image; image=image->next) {
-		if ( !strcmp( name, image->imgName ) ) {
+		if ( !Q_stricmp( name, image->imgName ) ) {
 			// the white image can be used with any set of parms, but other mismatches are errors
 			if ( strcmp( name, "*white" ) ) {
 				if ( image->flags != flags ) {
 					ri.Printf( PRINT_DEVELOPER, "WARNING: reused image %s with mixed flags (%i vs %i)\n", name, image->flags, flags );
+				}
+				if ( image->characterMIP != characterMIP ) {
+					ri.Printf( PRINT_DEVELOPER, "WARNING: reused image %s with mixed characterMIP parm\n", name );
 				}
 			}
 			return image;
@@ -2621,11 +2621,17 @@ image_t	*R_FindImageFile( const char *name, imgType_t type, imgFlags_t flags )
 			flags &= ~IMGFLAG_MIPMAP;
 	}
 
-	image = R_CreateImage2( ( char * ) name, pic, width, height, picFormat, picNumMips, type, flags, 0 );
+	image = R_CreateImageExt2( ( char * ) name, pic, width, height, picFormat, picNumMips, type, flags, 0, characterMIP );
 	ri.Free( pic );
 	return image;
 }
 
+
+image_t *R_FindImageFile( const char *name, imgType_t type, imgFlags_t flags ) {
+	return R_FindImageFileExt( name, type, flags, qfalse );
+}
+
+//----(SA)	end
 
 /*
 ================

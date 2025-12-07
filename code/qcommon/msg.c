@@ -935,17 +935,16 @@ netField_t entityStateFields[] =
 	{ NETF( otherEntityNum ), GENTITYNUM_BITS },
 	{ NETF( otherEntityNum2 ), GENTITYNUM_BITS },
 	{ NETF( groundEntityNum ), GENTITYNUM_BITS },
-	{ NETF( loopSound ), 10 },
-	{ NETF( oldloopSound ), 10 },
+	{ NETF( loopSound ), 8 },
 	{ NETF( constantLight ), 32 },
 	{ NETF( dl_intensity ), 32 }, //----(SA)	longer now to carry the corona colors
-	{ NETF( modelindex ), 10 },
-	{ NETF( modelindex2 ), 10 },
+	{ NETF( modelindex ), 9 },
+	{ NETF( modelindex2 ), 9 },
 	{ NETF( frame ), 16 },
 	{ NETF( clientNum ), 8 },
 	{ NETF( solid ), 24 },
 	{ NETF( event ), 10 },
-	{ NETF( eventParm ), 10 },
+	{ NETF( eventParm ), 8 },
 	{ NETF( eventSequence ), 8 }, // warning: need to modify cg_event.c at "// check the sequencial list" if you change this
 	{ NETF( events[0] ), 8 },
 	{ NETF( events[1] ), 8 },
@@ -970,7 +969,6 @@ netField_t entityStateFields[] =
 	{ NETF( effect3Time ), 32},
 	{ NETF( aiState ), 2},
 	{ NETF( animMovetype ), 6},
-	{ NETF( perks ), MAX_PERKS },
 };
 
 
@@ -1404,7 +1402,6 @@ netField_t playerStateFields[] =
 	{ PSF( serverCursorHintVal ), 8}, //----(SA)	added
 	{ PSF( classWeaponTime ), 32}, // JPW NERVE
 	{ PSF( footstepCount ), 0},
-	{ PSF( holding ), 32},
 };
 
 /*
@@ -1423,7 +1420,6 @@ void MSG_WriteDeltaPlayerstate( msg_t *msg, struct playerState_s *from, struct p
 	int powerupbits;
 	int holdablebits;
 	int numFields;
-	int perksbits;
 	netField_t      *field;
 	int             *fromF, *toF;
 	float fullFloat;
@@ -1517,19 +1513,14 @@ void MSG_WriteDeltaPlayerstate( msg_t *msg, struct playerState_s *from, struct p
 		}
 	}
 	powerupbits = 0;
-	for (i = 0; i < MAX_POWERUPS; i++) {
-		if (to->powerups[i] != from->powerups[i]) {
+	for ( i = 0 ; i < MAX_POWERUPS ; i++ ) {
+		if ( to->powerups[i] != from->powerups[i] ) {
 			powerupbits |= 1 << i;
 		}
 	}
-	perksbits = 0;
-	for (i = 0; i < MAX_PERKS; i++) {
-		if (to->perks[i] != from->perks[i]) {
-			perksbits |= 1 << i;
-		}
-	}
 
-	if ( statsbits || persistantbits || holdablebits || powerupbits || perksbits ) {
+
+	if ( statsbits || persistantbits || holdablebits || powerupbits ) {
 
 		MSG_WriteBits( msg, 1, 1 ); // something changed
 
@@ -1552,7 +1543,7 @@ void MSG_WriteDeltaPlayerstate( msg_t *msg, struct playerState_s *from, struct p
 			MSG_WriteBits( msg, persistantbits, MAX_PERSISTANT );
 			for ( i = 0 ; i < MAX_PERSISTANT ; i++ )
 				if ( persistantbits & ( 1 << i ) ) {
-					MSG_WriteLong( msg, to->persistant[i] );
+					MSG_WriteShort( msg, to->persistant[i] );
 				}
 		} else {
 			MSG_WriteBits( msg, 0, 1 ); // no change to persistant
@@ -1577,17 +1568,6 @@ void MSG_WriteDeltaPlayerstate( msg_t *msg, struct playerState_s *from, struct p
 			for ( i = 0 ; i < MAX_POWERUPS ; i++ )
 				if ( powerupbits & ( 1 << i ) ) {
 					MSG_WriteLong( msg, to->powerups[i] );
-				}
-		} else {
-			MSG_WriteBits( msg, 0, 1 ); // no change to powerups
-		}
-
-		if ( perksbits ) {
-			MSG_WriteBits( msg, 1, 1 ); // changed
-			MSG_WriteBits( msg, perksbits, MAX_PERKS );
-			for ( i = 0 ; i < MAX_PERKS ; i++ )
-				if ( perksbits & ( 1 << i ) ) {
-					MSG_WriteLong( msg, to->perks[i] );
 				}
 		} else {
 			MSG_WriteBits( msg, 0, 1 ); // no change to powerups
@@ -1732,62 +1712,8 @@ void MSG_WriteDeltaPlayerstate( msg_t *msg, struct playerState_s *from, struct p
 			MSG_WriteBits( msg, 0, 1 ); // no change
 		}
 	}
-
-
-	int upgradedBits[4] = {0};
-
-	for (int j = 0; j < 4; j++)
-	{
-		for (int i = 0; i < 16; i++)
-		{
-			int index = i + j * 16;
-			if (to->weaponUpgraded[index] != from->weaponUpgraded[index])
-			{
-				upgradedBits[j] |= 1 << i;
-			}
-		}
-	}
-
-	if (upgradedBits[0] || upgradedBits[1] || upgradedBits[2] || upgradedBits[3])
-	{
-		MSG_WriteBits(msg, 1, 1); // something changed
-
-		for (int j = 0; j < 4; j++)
-		{
-			if (upgradedBits[j])
-			{
-				MSG_WriteBits(msg, 1, 1);
-				MSG_WriteShort(msg, upgradedBits[j]);
-
-				for (int i = 0; i < 16; i++)
-				{
-					if (upgradedBits[j] & (1 << i))
-					{
-						int index = i + j * 16;
-						MSG_WriteShort(msg, to->weaponUpgraded[index]);
-					}
-				}
-			}
-			else
-			{
-				MSG_WriteBits(msg, 0, 1); // no change in this block
-			}
-		}
-	}
-	else
-	{
-		MSG_WriteBits(msg, 0, 1); // no upgrade flags changed
-	}
-
 #endif
 
-	//1NTERRUPTOR
-	MSG_WriteLong(msg, to->scriptAccumLabel.value);
-	MSG_WriteBits(msg, to->scriptAccumLabel.state, 1);
-	MSG_WriteLong(msg, to->scriptAccumLabel.flags);
-	MSG_WriteLong(msg, to->scriptAccumLabel.pos[0]);
-	MSG_WriteLong(msg, to->scriptAccumLabel.pos[1]);
-	MSG_WriteString(msg, to->scriptAccumLabel.label);
 
 	if ( print ) {
 		if ( msg->bit == 0 ) {
@@ -1897,7 +1823,7 @@ void MSG_ReadDeltaPlayerstate( msg_t *msg, playerState_t *from, playerState_t *t
 			bits = MSG_ReadBits (msg, MAX_PERSISTANT);
 			for ( i = 0 ; i < MAX_PERSISTANT ; i++ ) {
 				if ( bits & ( 1 << i ) ) {
-					to->persistant[i] = MSG_ReadLong( msg );
+					to->persistant[i] = MSG_ReadShort( msg );
 				}
 			}
 		}
@@ -1920,17 +1846,6 @@ void MSG_ReadDeltaPlayerstate( msg_t *msg, playerState_t *from, playerState_t *t
 			for ( i = 0 ; i < MAX_POWERUPS ; i++ ) {
 				if ( bits & ( 1 << i ) ) {
 					to->powerups[i] = MSG_ReadLong( msg );
-				}
-			}
-		}
-
-		// parse perks
-		if ( MSG_ReadBits( msg, 1 ) ) {
-			LOG( "PS_PERKS" );
-			bits = MSG_ReadBits (msg, MAX_PERKS);
-			for ( i = 0 ; i < MAX_PERKS ; i++ ) {
-				if ( bits & ( 1 << i ) ) {
-					to->perks[i] = MSG_ReadLong( msg );
 				}
 			}
 		}
@@ -1991,35 +1906,8 @@ void MSG_ReadDeltaPlayerstate( msg_t *msg, playerState_t *from, playerState_t *t
 		}
 	}
 
-	if (MSG_ReadBits(msg, 1))
-	{
-		for (int j = 0; j < 4; j++)
-		{
-			if (MSG_ReadBits(msg, 1))
-			{
-				int bits = MSG_ReadShort(msg);
-
-				for (int i = 0; i < 16; i++)
-				{
-					if (bits & (1 << i))
-					{
-						int index = i + j * 16;
-						to->weaponUpgraded[index] = MSG_ReadShort(msg);
-					}
-				}
-			}
-		}
-	}
-
 #endif
 
-	//1NTERRUPTOR
-	to->scriptAccumLabel.value = MSG_ReadLong(msg);
-	to->scriptAccumLabel.state = MSG_ReadBits(msg, 1);
-	to->scriptAccumLabel.flags = MSG_ReadLong(msg);
-	to->scriptAccumLabel.pos[0] = MSG_ReadLong(msg);
-	to->scriptAccumLabel.pos[1] = MSG_ReadLong(msg);
-	Q_strncpyz(to->scriptAccumLabel.label, MSG_ReadString(msg), MAX_QPATH);
 
 	if ( print ) {
 		if ( msg->bit == 0 ) {

@@ -20,6 +20,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 
+// Use EnumProcesses() with Windows XP compatibility
+#define PSAPI_VERSION 1
+
 #include "../qcommon/q_shared.h"
 #include "../qcommon/qcommon.h"
 #include "sys_local.h"
@@ -46,11 +49,12 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // Used to determine where to store user-specific files
 static char homePath[ MAX_OSPATH ] = { 0 };
 
-#ifdef STEAM
-// Steam installation paths
-static char steamInstallPath[ MAX_OSPATH ];
-static char steamGamePath[ MAX_OSPATH ];
-static char steamWorkshopPath[ MAX_OSPATH ];
+#ifndef STANDALONE
+// Used to store the Steam RTCW installation path
+static char steamPath[ MAX_OSPATH ] = { 0 };
+
+// Used to store the GOG RTCW installation path
+static char gogPath[ MAX_OSPATH ] = { 0 };
 #endif
 
 #ifndef DEDICATED
@@ -98,10 +102,8 @@ Sys_DefaultHomePath
 char *Sys_DefaultHomePath( void )
 {
 	TCHAR szPath[MAX_PATH];
+	FARPROC qSHGetFolderPath;
 	HMODULE shfolder = LoadLibrary("shfolder.dll");
-
-	typedef HRESULT (WINAPI *PSHGETFOLDERPATH)(HWND, int, HANDLE, DWORD, LPTSTR);
-	PSHGETFOLDERPATH qSHGetFolderPath = NULL;
 
 	if(shfolder == NULL)
 	{
@@ -111,7 +113,7 @@ char *Sys_DefaultHomePath( void )
 
 	if(!*homePath && com_homepath)
 	{
-		qSHGetFolderPath = (PSHGETFOLDERPATH)GetProcAddress(shfolder, "SHGetFolderPathA");
+		qSHGetFolderPath = GetProcAddress(shfolder, "SHGetFolderPathA");
 		if(qSHGetFolderPath == NULL)
 		{
 			Com_Printf("Unable to find SHGetFolderPath in SHFolder.dll\n");
@@ -140,122 +142,7 @@ char *Sys_DefaultHomePath( void )
 	return homePath;
 }
 
-#ifdef STEAM
-
-static qboolean DirExists(const char *path)
-{
-	DWORD file_attrib = GetFileAttributes(path);
-	return (file_attrib != INVALID_FILE_ATTRIBUTES && (file_attrib & FILE_ATTRIBUTE_DIRECTORY));
-}
-
-static qboolean FileExists(const char *path)
-{
-	DWORD file_attrib = GetFileAttributes(path);
-	return (file_attrib != INVALID_FILE_ATTRIBUTES);
-}
-
-// Find Steam game and workshop paths
-// Uses libraryfolders.vdf file to search all Steam library locations
-// Sets static steamInstallPath, steamGamePath and steamWorkshopPath
-static void FindSteamPaths()
-{
-	static qboolean done = qfalse;
-	static char *steamapp_game_subdir     = "\\steamapps\\common\\" STEAMPATH_NAME;
-	static char *steamapp_workshop_subdir = "\\steamapps\\workshop\\content\\" STEAMPATH_REALAPPID;
-	static char *game_keyfile_path        = "\\Main\\pak0.pk3";
-
-	if (done)
-		return;
-
-	// Find install path
-	HKEY regkey;
-	if (!RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Valve\\Steam", 0, KEY_QUERY_VALUE, &regkey)) {
-
-		DWORD path_len = MAX_OSPATH - 1;
-		if (RegQueryValueEx(regkey, "SteamPath", NULL, NULL, (LPBYTE)steamInstallPath, &path_len))
-			// Failure
-			steamInstallPath[0] = '\0';
-		else
-			steamInstallPath[path_len] = '\0';
-
-		RegCloseKey(regkey);
-	}
-
-	if (!*steamInstallPath) {
-		Com_Printf("WARNING: Failed to retrieve Steam registry entry\n");
-		done = qtrue;
-		return;
-	}
-
-	// Find library paths in libraryfolders.vdf file
-	char libfile_path[MAX_OSPATH];
-	Q_strncpyz(libfile_path, steamInstallPath, MAX_OSPATH);
-	Q_strcat(libfile_path, MAX_OSPATH, "\\steamapps\\libraryfolders.vdf");
-
-	FILE *fp = fopen(libfile_path, "r");
-	if (!fp) {
-		Com_Printf("Failed to find Steam libraryfolders.vdf - using Steam install location\n");
-
-		// No libraryfolders.vdf - use install path
-		Q_strncpyz(steamGamePath, steamInstallPath, MAX_OSPATH);
-		Q_strcat(steamGamePath, MAX_OSPATH, steamapp_game_subdir);
-
-		Q_strncpyz(steamWorkshopPath, steamInstallPath, MAX_OSPATH);
-		Q_strcat(steamWorkshopPath, MAX_OSPATH, steamapp_workshop_subdir);
-
-		done = qtrue;
-		return;
-	}
-
-	// Search file for library paths
-	char key[100];
-	char path[MAX_OSPATH];
-	char keyfile_path[MAX_OSPATH];
-	while (fscanf(fp, "%s", key) != EOF) {
-
-		if (strcmp(key, "\"path\"") == 0) {
-
-			// Path key found - get adjacent value
-			fscanf(fp, " \"%255[^\"]\"", path);
-			if (!*path)
-				continue;
-
-			// Check for game directory if not already found
-			if (!*steamGamePath) {
-				Q_strncpyz(steamGamePath, path, MAX_OSPATH);
-				Q_strcat(steamGamePath, MAX_OSPATH, steamapp_game_subdir);
-
-				// Check for actual file so old or empty installations are ignored
-				Q_strncpyz(keyfile_path, steamGamePath, MAX_OSPATH);
-				Q_strcat(keyfile_path, MAX_OSPATH, game_keyfile_path);
-
-				if (!FileExists(keyfile_path))
-					steamGamePath[0] = '\0';
-			}
-
-			// Check for workshop directory if not already found
-			if (!*steamWorkshopPath) {
-				Q_strncpyz(steamWorkshopPath, path, MAX_OSPATH);
-				Q_strcat(steamWorkshopPath, MAX_OSPATH, steamapp_workshop_subdir);
-
-				if (!DirExists(steamWorkshopPath))
-					steamWorkshopPath[0] = '\0';
-			}
-
-			// Found - stop
-			if (*steamGamePath && *steamWorkshopPath)
-				break;
-		}
-	}
-
-	fclose(fp);
-
-	done = qtrue;
-}
-
-#endif // !STANDALONE
-
-#ifdef STEAM
+#ifndef STANDALONE
 /*
 ================
 Sys_SteamPath
@@ -263,22 +150,86 @@ Sys_SteamPath
 */
 char *Sys_SteamPath( void )
 {
-	FindSteamPaths();
-	return steamGamePath;
+#if defined(STEAMPATH_NAME) || defined(STEAMPATH_APPID)
+	HKEY steamRegKey;
+	DWORD pathLen = MAX_OSPATH;
+	qboolean finishPath = qfalse;
+
+#ifdef STEAMPATH_APPID
+	// Assuming Steam is a 32-bit app
+	if (!steamPath[0] && !RegOpenKeyEx(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Steam App " STEAMPATH_APPID, 0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &steamRegKey))
+	{
+		pathLen = MAX_OSPATH;
+		if (RegQueryValueEx(steamRegKey, "InstallLocation", NULL, NULL, (LPBYTE)steamPath, &pathLen))
+			steamPath[0] = '\0';
+
+		RegCloseKey(steamRegKey);
+	}
+#endif
+
+#ifdef STEAMPATH_NAME
+	if (!steamPath[0] && !RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Valve\\Steam", 0, KEY_QUERY_VALUE, &steamRegKey))
+	{
+		pathLen = MAX_OSPATH;
+		if (RegQueryValueEx(steamRegKey, "SteamPath", NULL, NULL, (LPBYTE)steamPath, &pathLen))
+			if (RegQueryValueEx(steamRegKey, "InstallPath", NULL, NULL, (LPBYTE)steamPath, &pathLen))
+				steamPath[0] = '\0';
+
+		if (steamPath[0])
+			finishPath = qtrue;
+
+		RegCloseKey(steamRegKey);
+	}
+#endif
+
+	if (steamPath[0])
+	{
+		if (pathLen == MAX_OSPATH)
+			pathLen--;
+
+		steamPath[pathLen] = '\0';
+
+		if (finishPath)
+			Q_strcat(steamPath, MAX_OSPATH, "\\SteamApps\\common\\" STEAMPATH_NAME );
+	}
+#endif
+
+	return steamPath;
 }
 
 /*
-=====================
-Sys_SteamWorkshopPath
-=====================
+================
+Sys_GogPath
+================
 */
-char *Sys_SteamWorkshopPath( void )
+char *Sys_GogPath( void )
 {
-	FindSteamPaths();
-	return steamWorkshopPath;
-}
+#ifdef GOGPATH_ID
+	HKEY gogRegKey;
+	DWORD pathLen = MAX_OSPATH;
 
+	if (!gogPath[0] && !RegOpenKeyEx(HKEY_LOCAL_MACHINE, "SOFTWARE\\GOG.com\\Games\\" GOGPATH_ID, 0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &gogRegKey))
+	{
+		pathLen = MAX_OSPATH;
+		if (RegQueryValueEx(gogRegKey, "PATH", NULL, NULL, (LPBYTE)gogPath, &pathLen))
+			gogPath[0] = '\0';
+
+		RegCloseKey(gogRegKey);
+	}
+
+	if (gogPath[0])
+	{
+		if (pathLen == MAX_OSPATH)
+			pathLen--;
+
+		gogPath[pathLen] = '\0';
+	}
 #endif
+
+	return gogPath;
+}
+#endif
+
 /*
 ================
 Sys_Milliseconds
@@ -474,7 +425,7 @@ DIRECTORY SCANNING
 ==============================================================
 */
 
-#define MAX_FOUND_FILES 0x2000
+#define MAX_FOUND_FILES 0x1000
 
 /*
 ==============
@@ -489,6 +440,10 @@ void Sys_ListFilteredFiles( const char *basedir, char *subdirs, char *filter, ch
 	struct _finddata_t findinfo;
 
 	if ( *numfiles >= MAX_FOUND_FILES - 1 ) {
+		return;
+	}
+
+	if ( basedir[0] == '\0' ) {
 		return;
 	}
 
@@ -591,6 +546,11 @@ char **Sys_ListFiles( const char *directory, const char *extension, char *filter
 		listCopy[i] = NULL;
 
 		return listCopy;
+	}
+
+	if ( directory[0] == '\0' ) {
+		*numfiles = 0;
+		return NULL;
 	}
 
 	if ( !extension) {
@@ -928,7 +888,6 @@ char* Sys_GetDLLName( const char *name ) {
 	return va("%s_sp_" ARCH_STRING DLL_EXT, name);
 }
 
-
 /*
 ==============
 Sys_GetHighQualityCPU
@@ -984,7 +943,7 @@ void Sys_OpenURL( char *url, qboolean doexit ) {                // NERVE - SMF
 	wnd = GetForegroundWindow();
 
 	if ( wnd ) {
-		ShowWindow( wnd, SW_RESTORE );
+		ShowWindow( wnd, SW_MAXIMIZE );
 	}
 
 	if ( doexit ) {

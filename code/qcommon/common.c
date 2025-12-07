@@ -46,9 +46,9 @@ int demo_protocols[] =
 #define MAX_NUM_ARGVS   50
 
 #define MIN_DEDICATED_COMHUNKMEGS 1
-#define MIN_COMHUNKMEGS		256
-#define DEF_COMHUNKMEGS 	1024
-#define DEF_COMZONEMEGS		128
+#define MIN_COMHUNKMEGS		128
+#define DEF_COMHUNKMEGS 	256
+#define DEF_COMZONEMEGS		32
 #define DEF_COMHUNKMEGS_S	XSTRING(DEF_COMHUNKMEGS)
 #define DEF_COMZONEMEGS_S	XSTRING(DEF_COMZONEMEGS)
 
@@ -99,7 +99,6 @@ cvar_t	*com_maxfpsMinimized;
 cvar_t	*com_abnormalExit;
 cvar_t	*com_standalone;
 cvar_t	*com_gamename;
-cvar_t	*com_atmosphericEffect;	/// Berserker
 cvar_t	*com_protocol;
 #ifdef LEGACY_PROTOCOL
 cvar_t	*com_legacyprotocol;
@@ -1938,7 +1937,7 @@ For controlling environment variables
 
 void Com_ExecuteCfg(void)
 {
-	Cbuf_ExecuteText(EXEC_NOW, "exec realrtcwdefault.cfg\n");
+	Cbuf_ExecuteText(EXEC_NOW, "exec default.cfg\n");
 	if ( FS_ReadFile( "language.cfg", NULL ) > 0 ) {
 		Cbuf_ExecuteText(EXEC_APPEND, "exec language.cfg\n");
 	} else if ( FS_ReadFile( "Language.cfg", NULL ) > 0 ) {
@@ -2019,13 +2018,9 @@ Expose possibility to change current running mod to the user
 
 void Com_GameRestart_f(void)
 {
-    // If an argument is provided, treat it as the new fs_game
-    if (Cmd_Argc() > 1) {
-        Cvar_Set("fs_game", Cmd_Argv(1));
-    }
+	Cvar_Set("fs_game", Cmd_Argv(1));
 
-    // Always restart the game
-    Com_GameRestart(0, qtrue);
+	Com_GameRestart(0, qtrue);
 }
 
 #ifndef STANDALONE
@@ -2370,7 +2365,6 @@ void Com_Init( char *commandLine ) {
 	com_altivec = Cvar_Get ("com_altivec", "1", CVAR_ARCHIVE);
 	com_maxfps = Cvar_Get( "com_maxfps", "76", CVAR_ARCHIVE );
 	com_blood = Cvar_Get( "com_blood", "1", CVAR_ARCHIVE );
-	com_atmosphericEffect = Cvar_Get("com_atmosphericEffect", "", CVAR_ROM);
 
 	com_logfile = Cvar_Get( "logfile", "0", CVAR_TEMP );
 

@@ -1,32 +1,32 @@
 /*
 ===========================================================================
 
-Return to Castle Wolfenstein multiplayer GPL Source Code
+Return to Castle Wolfenstein single player GPL Source Code
 Copyright (C) 1999-2010 id Software LLC, a ZeniMax Media company. 
 
-This file is part of the Return to Castle Wolfenstein multiplayer GPL Source Code (RTCW MP Source Code).  
+This file is part of the Return to Castle Wolfenstein single player GPL Source Code (RTCW SP Source Code).  
 
-RTCW MP Source Code is free software: you can redistribute it and/or modify
+RTCW SP Source Code is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-RTCW MP Source Code is distributed in the hope that it will be useful,
+RTCW SP Source Code is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with RTCW MP Source Code.  If not, see <http://www.gnu.org/licenses/>.
+along with RTCW SP Source Code.  If not, see <http://www.gnu.org/licenses/>.
 
-In addition, the RTCW MP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW MP Source Code.  If not, please request a copy in writing from id Software at the address below.
+In addition, the RTCW SP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW SP Source Code.  If not, please request a copy in writing from id Software at the address below.
 
 If you have questions concerning this license or the applicable additional terms, you may contact in writing id Software LLC, c/o ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 ===========================================================================
 */
 
-// tr_models.c -- model loading
+// tr_models.c -- model loading and caching
 
 #include "tr_local.h"
 
@@ -114,7 +114,7 @@ qhandle_t R_RegisterMD3(const char *name, model_t *mod)
 			loaded = R_LoadMDC( mod, lod, buf.u, name );
 		}
 		// done.
-		
+	
 		ri.FS_FreeFile(buf.v);
 
 		if(loaded)
@@ -280,7 +280,6 @@ static modelExtToLoaderMap_t modelLoaders[ ] =
 
 static int numModelLoaders = ARRAY_LEN(modelLoaders);
 
-
 /*
 ** R_GetModelByHandle
 */
@@ -366,16 +365,23 @@ qhandle_t RE_RegisterModel( const char *name ) {
 	// allocate a new model_t
 
 	if ( ( mod = R_AllocModel() ) == NULL ) {
-		ri.Printf( PRINT_WARNING, "RE_RegisterModel: R_AllocModel() failed for '%s'\n", name);
+		ri.Printf( PRINT_WARNING, "RE_RegisterModel: R_AllocModel() failed for '%s'\n", name );
 		return 0;
 	}
 
 	// only set the name after the model has been successfully loaded
 	Q_strncpyz( mod->name, name, sizeof( mod->name ) );
 
+// GR - by default models are not tessellated
+	mod->ATI_tess = qfalse;
+// GR - check if can be tessellated...
+//		make sure to tessellate model heads
+	if ( strstr( name, "head" ) ) {
+		mod->ATI_tess = qtrue;
+	}
 
 	R_IssuePendingRenderCommands();
-
+ 
 	mod->type = MOD_BAD;
 	mod->numLods = 0;
 
@@ -385,7 +391,6 @@ qhandle_t RE_RegisterModel( const char *name ) {
 	Q_strncpyz( localName, name, MAX_QPATH );
 
 	ext = COM_GetExtension( localName );
-
 	if( *ext )
 	{
 		// Look for the correct loader and use it
@@ -398,7 +403,6 @@ qhandle_t RE_RegisterModel( const char *name ) {
 				break;
 			}
 		}
-
 		// A loader was found
 		if( i < numModelLoaders )
 		{
@@ -441,7 +445,7 @@ qhandle_t RE_RegisterModel( const char *name ) {
 			break;
 		}
 	}
-
+	
 	return hModel;
 }
 
@@ -466,8 +470,7 @@ R_MDC_GetAnorm
 =============
 */
 unsigned char R_MDC_GetAnorm( const vec3_t dir ) {
-	int i, best_start_i[3] = { 0 }, next_start, next_end;
-	int best = 0; // TTimo: init
+	int i, best_start_i[3] = { 0 }, next_start, next_end, best = 0;     // TTimo: init
 	float best_diff, group_val, this_val, diff;
 	float   *this_norm;
 
@@ -521,7 +524,6 @@ unsigned char R_MDC_GetAnorm( const vec3_t dir ) {
 		if ( this_norm[2] != group_val ) {
 			break; // done checking the group
 		}
-
 		diff = DotProduct( dir, this_norm );
 
 		if ( diff > best_diff ) {
@@ -1096,8 +1098,8 @@ R_LoadMD3
 */
 static qboolean R_LoadMD3(model_t * mod, int lod, void *buffer, const char *modName)
 {
-	int             f, i, j; 
-
+	int             f, i, j;
+ 
 	md3Header_t    *md3Model;
 	md3Frame_t     *md3Frame;
 	md3Surface_t   *md3Surf;
@@ -1334,7 +1336,7 @@ static qboolean R_LoadMD3(model_t * mod, int lod, void *buffer, const char *modN
 			// decode X as cos( lat ) * sin( long )
 			// decode Y as sin( lat ) * sin( long )
 			// decode Z as cos( long )
-
+ 
 			fNormal[0] = tr.sinTable[(lat+(FUNCTABLE_SIZE/4))&FUNCTABLE_MASK] * tr.sinTable[lng];
 			fNormal[1] = tr.sinTable[lat] * tr.sinTable[lng];
 			fNormal[2] = tr.sinTable[(lng+(FUNCTABLE_SIZE/4))&FUNCTABLE_MASK];
@@ -1566,7 +1568,6 @@ static qboolean R_LoadMD3(model_t * mod, int lod, void *buffer, const char *modN
 
 	return qtrue;
 }
-
 
 /*
 =================
@@ -1908,6 +1909,7 @@ static qboolean R_LoadMDR( model_t *mod, void *buffer, int filesize, const char 
 	return qtrue;
 }
 
+
 /*
 =================
 R_LoadMDS
@@ -1942,7 +1944,7 @@ static qboolean R_LoadMDS( model_t *mod, void *buffer, const char *mod_name ) {
 	mod->dataSize += size;
 	mds = mod->mds = ri.Hunk_Alloc( size, h_low );
 
-	Com_Memcpy( mds, buffer, LittleLong(pinmodel->ofsEnd) );
+	memcpy( mds, buffer, LittleLong( pinmodel->ofsEnd ) );
 
 	LL( mds->ident );
 	LL( mds->version );
@@ -1964,54 +1966,58 @@ static qboolean R_LoadMDS( model_t *mod, void *buffer, const char *mod_name ) {
 		return qfalse;
 	}
 
-	// swap all the frames
-	//frameSize = (int)( &((mdsFrame_t *)0)->bones[ mds->numBones ] );
-	frameSize = (int) ( sizeof( mdsFrame_t ) - sizeof( mdsBoneFrameCompressed_t ) + mds->numBones * sizeof( mdsBoneFrameCompressed_t ) );
-	for ( i = 0 ; i < mds->numFrames ; i++, frame++ ) {
-		frame = ( mdsFrame_t * )( (byte *)mds + mds->ofsFrames + i * frameSize );
-		frame->radius = LittleFloat( frame->radius );
-		for ( j = 0 ; j < 3 ; j++ ) {
-			frame->bounds[0][j] = LittleFloat( frame->bounds[0][j] );
-			frame->bounds[1][j] = LittleFloat( frame->bounds[1][j] );
-			frame->localOrigin[j] = LittleFloat( frame->localOrigin[j] );
-			frame->parentOffset[j] = LittleFloat( frame->parentOffset[j] );
+	if ( LittleLong( 1 ) != 1 ) {
+		// swap all the frames
+		//frameSize = (int)( &((mdsFrame_t *)0)->bones[ mds->numBones ] );
+		frameSize = (int) ( sizeof( mdsFrame_t ) - sizeof( mdsBoneFrameCompressed_t ) + mds->numBones * sizeof( mdsBoneFrameCompressed_t ) );
+		for ( i = 0 ; i < mds->numFrames ; i++, frame++ ) {
+			frame = ( mdsFrame_t * )( (byte *)mds + mds->ofsFrames + i * frameSize );
+			frame->radius = LittleFloat( frame->radius );
+			for ( j = 0 ; j < 3 ; j++ ) {
+				frame->bounds[0][j] = LittleFloat( frame->bounds[0][j] );
+				frame->bounds[1][j] = LittleFloat( frame->bounds[1][j] );
+				frame->localOrigin[j] = LittleFloat( frame->localOrigin[j] );
+				frame->parentOffset[j] = LittleFloat( frame->parentOffset[j] );
+			}
+			for ( j = 0 ; j < mds->numBones * sizeof( mdsBoneFrameCompressed_t ) / sizeof( short ) ; j++ ) {
+				( (short *)frame->bones )[j] = LittleShort( ( (short *)frame->bones )[j] );
+			}
 		}
-		for ( j = 0 ; j < mds->numBones * sizeof( mdsBoneFrameCompressed_t ) / sizeof( short ) ; j++ ) {
-			( (short *)frame->bones )[j] = LittleShort( ( (short *)frame->bones )[j] );
+
+		// swap all the tags
+		tag = ( mdsTag_t * )( (byte *)mds + mds->ofsTags );
+		for ( i = 0 ; i < mds->numTags ; i++, tag++ ) {
+			LL( tag->boneIndex );
+			tag->torsoWeight = LittleFloat( tag->torsoWeight );
 		}
-	}
 
-	// swap all the tags
-	tag = ( mdsTag_t * )( (byte *)mds + mds->ofsTags );
-	for ( i = 0 ; i < mds->numTags ; i++, tag++ ) {
-		LL( tag->boneIndex );
-		tag->torsoWeight = LittleFloat( tag->torsoWeight );
-	}
-
-	// swap all the bones
-	for ( i = 0 ; i < mds->numBones ; i++, bi++ ) {
-		bi = ( mdsBoneInfo_t * )( (byte *)mds + mds->ofsBones + i * sizeof( mdsBoneInfo_t ) );
-		LL( bi->parent );
-		bi->torsoWeight = LittleFloat( bi->torsoWeight );
-		bi->parentDist = LittleFloat( bi->parentDist );
-		LL( bi->flags );
+		// swap all the bones
+		for ( i = 0 ; i < mds->numBones ; i++, bi++ ) {
+			bi = ( mdsBoneInfo_t * )( (byte *)mds + mds->ofsBones + i * sizeof( mdsBoneInfo_t ) );
+			LL( bi->parent );
+			bi->torsoWeight = LittleFloat( bi->torsoWeight );
+			bi->parentDist = LittleFloat( bi->parentDist );
+			LL( bi->flags );
+		}
 	}
 
 	// swap all the surfaces
 	surf = ( mdsSurface_t * )( (byte *)mds + mds->ofsSurfaces );
 	for ( i = 0 ; i < mds->numSurfaces ; i++ ) {
-		LL( surf->ident );
-		LL( surf->shaderIndex );
-		LL( surf->minLod );
-		LL( surf->ofsHeader );
-		LL( surf->ofsCollapseMap );
-		LL( surf->numTriangles );
-		LL( surf->ofsTriangles );
-		LL( surf->numVerts );
-		LL( surf->ofsVerts );
-		LL( surf->numBoneReferences );
-		LL( surf->ofsBoneReferences );
-		LL( surf->ofsEnd );
+		if ( LittleLong( 1 ) != 1 ) {
+			LL( surf->ident );
+			LL( surf->shaderIndex );
+			LL( surf->minLod );
+			LL( surf->ofsHeader );
+			LL( surf->ofsCollapseMap );
+			LL( surf->numTriangles );
+			LL( surf->ofsTriangles );
+			LL( surf->numVerts );
+			LL( surf->ofsVerts );
+			LL( surf->numBoneReferences );
+			LL( surf->ofsBoneReferences );
+			LL( surf->ofsEnd );
+		}
 
 		// change to surface identifier
 		surf->ident = SF_MDS;
@@ -2041,59 +2047,49 @@ static qboolean R_LoadMDS( model_t *mod, void *buffer, const char *mod_name ) {
 			surf->shaderIndex = 0;
 		}
 
-		// swap all the triangles
-		tri = ( mdsTriangle_t * )( (byte *)surf + surf->ofsTriangles );
-		for ( j = 0 ; j < surf->numTriangles ; j++, tri++ ) {
-			LL( tri->indexes[0] );
-			LL( tri->indexes[1] );
-			LL( tri->indexes[2] );
-		}
-
-		// swap all the vertexes
-		v = ( mdsVertex_t * )( (byte *)surf + surf->ofsVerts );
-		for ( j = 0 ; j < surf->numVerts ; j++ ) {
-			v->normal[0] = LittleFloat( v->normal[0] );
-			v->normal[1] = LittleFloat( v->normal[1] );
-			v->normal[2] = LittleFloat( v->normal[2] );
-
-			v->texCoords[0] = LittleFloat( v->texCoords[0] );
-			v->texCoords[1] = LittleFloat( v->texCoords[1] );
-
-			v->numWeights = LittleLong( v->numWeights );
-
-			for ( k = 0 ; k < v->numWeights ; k++ ) {
-				v->weights[k].boneIndex = LittleLong( v->weights[k].boneIndex );
-				v->weights[k].boneWeight = LittleFloat( v->weights[k].boneWeight );
-				v->weights[k].offset[0] = LittleFloat( v->weights[k].offset[0] );
-				v->weights[k].offset[1] = LittleFloat( v->weights[k].offset[1] );
-				v->weights[k].offset[2] = LittleFloat( v->weights[k].offset[2] );
+		if ( LittleLong( 1 ) != 1 ) {
+			// swap all the triangles
+			tri = ( mdsTriangle_t * )( (byte *)surf + surf->ofsTriangles );
+			for ( j = 0 ; j < surf->numTriangles ; j++, tri++ ) {
+				LL( tri->indexes[0] );
+				LL( tri->indexes[1] );
+				LL( tri->indexes[2] );
 			}
 
-			// find the fixedParent for this vert (if exists)
-			v->fixedParent = -1;
-			if ( v->numWeights == 2 ) {
-				// find the closest parent
-				if ( VectorLength( v->weights[0].offset ) < VectorLength( v->weights[1].offset ) ) {
-					v->fixedParent = 0;
-				} else {
-					v->fixedParent = 1;
+			// swap all the vertexes
+			v = ( mdsVertex_t * )( (byte *)surf + surf->ofsVerts );
+			for ( j = 0 ; j < surf->numVerts ; j++ ) {
+				v->normal[0] = LittleFloat( v->normal[0] );
+				v->normal[1] = LittleFloat( v->normal[1] );
+				v->normal[2] = LittleFloat( v->normal[2] );
+
+				v->texCoords[0] = LittleFloat( v->texCoords[0] );
+				v->texCoords[1] = LittleFloat( v->texCoords[1] );
+
+				v->numWeights = LittleLong( v->numWeights );
+
+				for ( k = 0 ; k < v->numWeights ; k++ ) {
+					v->weights[k].boneIndex = LittleLong( v->weights[k].boneIndex );
+					v->weights[k].boneWeight = LittleFloat( v->weights[k].boneWeight );
+					v->weights[k].offset[0] = LittleFloat( v->weights[k].offset[0] );
+					v->weights[k].offset[1] = LittleFloat( v->weights[k].offset[1] );
+					v->weights[k].offset[2] = LittleFloat( v->weights[k].offset[2] );
 				}
-				v->fixedDist = VectorLength( v->weights[v->fixedParent].offset );
+
+				v = (mdsVertex_t *)&v->weights[v->numWeights];
 			}
 
-			v = (mdsVertex_t *)&v->weights[v->numWeights];
-		}
+			// swap the collapse map
+			collapseMap = ( int * )( (byte *)surf + surf->ofsCollapseMap );
+			for ( j = 0; j < surf->numVerts; j++, collapseMap++ ) {
+				*collapseMap = LittleLong( *collapseMap );
+			}
 
-		// swap the collapse map
-		collapseMap = ( int * )( (byte *)surf + surf->ofsCollapseMap );
-		for ( j = 0; j < surf->numVerts; j++, collapseMap++ ) {
-			*collapseMap = LittleLong( *collapseMap );
-		}
-
-		// swap the bone references
-		boneref = ( int * )( ( byte *)surf + surf->ofsBoneReferences );
-		for ( j = 0; j < surf->numBoneReferences; j++, boneref++ ) {
-			*boneref = LittleLong( *boneref );
+			// swap the bone references
+			boneref = ( int * )( ( byte *)surf + surf->ofsBoneReferences );
+			for ( j = 0; j < surf->numBoneReferences; j++, boneref++ ) {
+				*boneref = LittleLong( *boneref );
+			}
 		}
 
 		// find the next surface
@@ -2174,11 +2170,11 @@ void R_Modellist_f( void ) {
 		total += mod->dataSize;
 	}
 	ri.Printf( PRINT_ALL, "%8i : Total models\n", total );
-
 }
 
 
 //=============================================================================
+
 
 /*
 ================
@@ -2267,6 +2263,7 @@ static int R_GetAnimTag( mdrHeader_t *mod, int framenum, const char *tagName, in
 	return -1;
 }
 
+
 /*
 ================
 R_LerpTag
@@ -2275,16 +2272,16 @@ R_LerpTag
 ================
 */
 int R_LerpTag( orientation_t *tag, const refEntity_t *refent, const char *tagNameIn, int startIndex ) {
-	mdvTag_t	*start, *end;
+	mdvTag_t    *start, *end;
 	mdvTag_t	start_space, end_space;
-	int		i;
-	float		frontLerp, backLerp;
-	model_t		*model;
-	char		tagName[MAX_QPATH];
-	int		retval = 0;
-	qhandle_t	handle;
-	int		startFrame, endFrame;
-	float		frac;
+	int i;
+	float frontLerp, backLerp;
+	model_t     *model;
+	char tagName[MAX_QPATH];       //, *ch;
+	int retval = 0;
+	qhandle_t handle;
+	int startFrame, endFrame;
+	float frac;
 
 	handle = refent->hModel;
 	startFrame = refent->oldframe;
@@ -2299,18 +2296,17 @@ int R_LerpTag( orientation_t *tag, const refEntity_t *refent, const char *tagNam
 		{
 			start = &start_space;
 			end = &end_space;
-
 			retval = R_GetAnimTag((mdrHeader_t *) model->modelData, startFrame, tagName, startIndex, &start);
 			R_GetAnimTag((mdrHeader_t *) model->modelData, endFrame, tagName, startIndex, &end);
 		}
-		else if( model->type == MOD_IQM ) {
+		else if ( model->type == MOD_IQM ) {
 			return R_IQMLerpTag( tag, model->modelData,
 					startFrame, endFrame,
 					frac, tagName, startIndex );
 		} else {
 			start = end = NULL;
 		}
-	} else if (model->type == MOD_MESH) {
+	} else if ( model->type == MOD_MESH ) {
 		// old MD3 style
 		retval = R_GetTag(model->mdv[0], startFrame, tagName, startIndex, &start);
 		R_GetTag(model->mdv[0], endFrame, tagName, startIndex, &end);
@@ -2358,9 +2354,9 @@ R_TagInfo_f
 ===============
 */
 void R_TagInfo_f( void ) {
-
 	Com_Printf( "command not functional\n" );
 }
+
 
 /*
 ====================
@@ -2375,7 +2371,6 @@ void R_ModelBounds( qhandle_t handle, vec3_t mins, vec3_t maxs ) {
 	if ( model->bmodel ) {
 		VectorCopy( model->bmodel->bounds[0], mins );
 		VectorCopy( model->bmodel->bounds[1], maxs );
-
 		return;
 	}
 
@@ -2389,7 +2384,6 @@ void R_ModelBounds( qhandle_t handle, vec3_t mins, vec3_t maxs ) {
 
 		VectorCopy( frame->bounds[0], mins );
 		VectorCopy( frame->bounds[1], maxs );
-
 		return;
 	} else if (model->type == MOD_MDR) {
 		mdrHeader_t	*header;
@@ -2419,6 +2413,7 @@ void R_ModelBounds( qhandle_t handle, vec3_t mins, vec3_t maxs ) {
 	VectorClear( maxs );
 	// done.
 }
+
 
 void *R_Hunk_Begin( void ) {
 	return NULL;

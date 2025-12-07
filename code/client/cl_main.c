@@ -278,7 +278,7 @@ void CL_Voip_f( void )
 		reason = "Voip codec not initialized";
 	else if (!clc.voipEnabled)
 		reason = "Server doesn't support VoIP";
-	else if (!clc.demoplaying)
+	else if (!clc.demoplaying && (Cvar_VariableValue("g_gametype") == GT_SINGLE_PLAYER || Cvar_VariableValue("ui_singlePlayerActive")))
 		reason = "running in single-player mode";
 
 	if (reason != NULL) {
@@ -1472,7 +1472,7 @@ void CL_Disconnect( qboolean showMainMenu ) {
 	// allow cheats locally
 #ifndef WOLF_SP_DEMO
 	// except for demo
-	Cvar_Set( "sv_cheats", "0" );
+	Cvar_Set( "sv_cheats", "1" );
 #endif
 
 	// not connected to a pure server anymore
@@ -1684,7 +1684,6 @@ void CL_Disconnect_f( void ) {
 	// RF, make sure loading variables are turned off
 	Cvar_Set( "savegame_loading", "0" );
 	Cvar_Set( "g_reloading", "0" );
-	Cvar_Set( "g_level_was_selected", "0" );
 	if ( clc.state != CA_DISCONNECTED && clc.state != CA_CINEMATIC ) {
 		Com_Error( ERR_DISCONNECT, "Disconnected from server" );
 	}
@@ -3359,7 +3358,7 @@ void CL_InitRef( void ) {
 	Com_Printf( "----- Initializing Renderer ----\n" );
 
 #ifdef USE_RENDERER_DLOPEN
-	cl_renderer = Cvar_Get("cl_renderer", "rend2", CVAR_ARCHIVE | CVAR_LATCH ); // removed cvar protected
+	cl_renderer = Cvar_Get("cl_renderer", "rend2", CVAR_ARCHIVE | CVAR_LATCH);
 
 	Com_sprintf(dllName, sizeof(dllName), "renderer_sp_%s_" ARCH_STRING DLL_EXT, cl_renderer->string);
 
@@ -3711,8 +3710,6 @@ void CL_Init( void ) {
 	// Rafael - particle switch
 	Cvar_Get( "cg_wolfparticles", "1", CVAR_ARCHIVE );
 	// done
-
-	Cvar_Get( "cg_autoReload", "1", CVAR_ARCHIVE ); // autoreload
 
 	cl_conXOffset = Cvar_Get( "cl_conXOffset", "0", 0 );
 	cl_inGameVideo = Cvar_Get( "r_inGameVideo", "1", CVAR_ARCHIVE );
@@ -4926,16 +4923,3 @@ qboolean CL_GetLimboString( int index, char *buf ) {
 	return qtrue;
 }
 // -NERVE - SMF
-
-/*
-=======================
-CL_OpenURL
-=======================
-*/
-void CL_OpenURL( const char *url ) {
-	if ( !url || !strlen( url ) ) {
-		Com_Printf(  "invalid/empty URL\n" );
-		return;
-	}
-	Sys_OpenURL( (char *)url, qfalse );
-}

@@ -76,7 +76,7 @@ int   		s_paintedtime; 		// sample PAIRS
 
 // MAX_SFX may be larger than MAX_SOUNDS because
 // of custom player sounds
-#define		MAX_SFX			8192
+#define		MAX_SFX			4096
 sfx_t		s_knownSfx[MAX_SFX];
 int			s_numSfx = 0;
 
@@ -1723,7 +1723,7 @@ void S_UpdateBackgroundTrack( void ) {
 			// loop
 			if(s_backgroundLoop[0])
 			{
-                S_OpenBackgroundStream( s_backgroundLoop );
+				S_OpenBackgroundStream( s_backgroundLoop );
 				if(!s_backgroundStream)
 					return;
 			}

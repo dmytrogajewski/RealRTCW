@@ -51,16 +51,16 @@ If you have questions concerning this license or the applicable additional terms
   #define GAMENAME_FOR_MASTER		"foobar"	// must NOT contain whitespace
 //  #define LEGACY_PROTOCOL	// You probably don't need this for your standalone game
 #else
-  #define PRODUCT_NAME			"RealRTCW" // iortcw
+  #define PRODUCT_NAME			"iortcw"
   #define BASEGAME			"main"
-  #define CLIENT_WINDOW_TITLE     	"RealRTCW"
-  #define CLIENT_WINDOW_MIN_TITLE 	"RealRTCW" // iowolfsp
+  #define CLIENT_WINDOW_TITLE     	"Return To Castle Wolfenstein"
+  #define CLIENT_WINDOW_MIN_TITLE 	"iowolfsp"
 #ifdef USE_XDG
-  #define HOMEPATH_NAME_UNIX		"RealRTCW\\5.1"
+  #define HOMEPATH_NAME_UNIX		"iortcw"
 #else
   #define HOMEPATH_NAME_UNIX		".wolf"
 #endif
-  #define HOMEPATH_NAME_WIN		"RealRTCW\\5.1"
+  #define HOMEPATH_NAME_WIN		"RTCW"
   #define HOMEPATH_NAME_MACOSX		HOMEPATH_NAME_WIN
   #define GAMENAME_FOR_MASTER		"wolfsp"
   #define LEGACY_PROTOCOL
@@ -70,15 +70,13 @@ If you have questions concerning this license or the applicable additional terms
 #define HEARTBEAT_FOR_MASTER		"DarkPlaces"
 #define FLATLINE_FOR_MASTER		"WolfFlatline-1"
 
-#define MAX_MAPS 128
-
 // When com_gamename is LEGACY_MASTER_GAMENAME, use wolfenstein master protocol.
 // You shouldn't change this unless you know what you're doing
 #define LEGACY_MASTER_GAMENAME		"wolfsp"
 #define LEGACY_HEARTBEAT_FOR_MASTER	"Wolfenstein-1"
 
 #ifndef PRODUCT_VERSION
-  #define PRODUCT_VERSION "5.3"
+  #define PRODUCT_VERSION "1.42b"
 #endif
 
 #define Q3_VERSION PRODUCT_NAME " " PRODUCT_VERSION
@@ -271,7 +269,7 @@ typedef int clipHandle_t;
 #define ROLL                2       // fall over
 
 // RF, this is just here so different elements of the engine can be aware of this setting as it changes
-#define MAX_SP_CLIENTS      128      // increasing this will increase memory usage significantly
+#define MAX_SP_CLIENTS      64      // increasing this will increase memory usage significantly
 
 // the game guarantees that no string from the network will ever
 // exceed MAX_STRING_CHARS
@@ -788,7 +786,6 @@ int PlaneTypeForNormal( vec3_t normal );
 void MatrixMultiply( float in1[3][3], float in2[3][3], float out[3][3] );
 void AngleVectors( const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up );
 void PerpendicularVector( vec3_t dst, const vec3_t src );
-float DistanceFromLineSquared( vec3_t p, vec3_t lp1, vec3_t lp2 );
 
 #ifndef MAX
 #define MAX(x,y) ((x)>(y)?(x):(y))
@@ -1265,7 +1262,7 @@ typedef enum {
 #define MAX_CLIENTS         128     // absolute limit
 #define MAX_LOCATIONS       64
 
-#define GENTITYNUM_BITS     11      // don't need to send any more
+#define GENTITYNUM_BITS     10      // don't need to send any more
 //#define	GENTITYNUM_BITS		11		// don't need to send any more		(SA) upped 4/21/2001 adjusted: tr_local.h (802-822), tr_main.c (1501), sv_snapshot (206)
 #define MAX_GENTITIES       ( 1 << GENTITYNUM_BITS )
 
@@ -1277,15 +1274,16 @@ typedef enum {
 #define ENTITYNUM_MAX_NORMAL    ( MAX_GENTITIES - 2 )
 
 
-#define MAX_MODELS          1024     // these are sent over the net as 8 bits
-#define MAX_SOUNDS          1024     // so they cannot be blindly increased
+#define MAX_MODELS          256     // these are sent over the net as 8 bits
+#define MAX_SOUNDS          256     // so they cannot be blindly increased
 
 
-#define MAX_PARTICLES_AREAS     512 // RealRTCW was 128
+#define MAX_PARTICLES_AREAS     128
 
 #define MAX_MULTI_SPAWNTARGETS  16 // JPW NERVE
 
-#define MAX_CONFIGSTRINGS   4096
+//#define	MAX_CONFIGSTRINGS	1024
+#define MAX_CONFIGSTRINGS   2048
 
 #define MAX_DLIGHT_CONFIGSTRINGS    128
 #define MAX_CLIPBOARD_CONFIGSTRINGS 64
@@ -1308,7 +1306,7 @@ typedef enum {
 
 #define RESERVED_CONFIGSTRINGS  2   // game can't modify below this, only the system can
 
-#define MAX_GAMESTATE_CHARS 32000
+#define MAX_GAMESTATE_CHARS 16000
 typedef struct {
 	int stringOffsets[MAX_CONFIGSTRINGS];
 	char stringData[MAX_GAMESTATE_CHARS];
@@ -1335,21 +1333,21 @@ typedef enum
 
 
 // weapon grouping
-#define MAX_WEAP_BANKS      11
-#define MAX_WEAPS_IN_BANK   6
+#define MAX_WEAP_BANKS      12
+#define MAX_WEAPS_IN_BANK   3
 // JPW NERVE
 #define MAX_WEAPS_IN_BANK_MP    8
 #define MAX_WEAP_BANKS_MP   7
+// jpw
+#define MAX_WEAP_ALTS       WP_DYNAMITE
 
 
 // bit field limits
 #define MAX_STATS               16
-#define MAX_PERSISTANT          32
+#define MAX_PERSISTANT          16
 #define MAX_POWERUPS            16
 #define MAX_WEAPONS             64  // (SA) and yet more!
 #define MAX_HOLDABLE            16
-#define MAX_PERKS 			    16
-
 
 // Ridah, increased this
 //#define	MAX_PS_EVENTS			2
@@ -1448,7 +1446,6 @@ typedef struct playerState_s {
 	int holdable[MAX_HOLDABLE];
 	int holding;                        // the current item in holdable[] that is selected (held)
 	int weapons[MAX_WEAPONS / ( sizeof( int ) * 8 )];   // 64 bits for weapons held
-	int perks[MAX_PERKS];                // Perks
 
 	// Ridah, allow for individual bounding boxes
 	vec3_t mins, maxs;
@@ -1530,10 +1527,6 @@ typedef struct playerState_s {
 	aistateEnum_t aiState;
 
 	float footstepCount;
-	// Jaybird - Shotgun
-	qboolean	m97reloadInterrupt;
-
-	int weaponUpgraded[MAX_WEAPONS]; // 0 = not upgraded, 1 = upgraded
 
 } playerState_t;
 
@@ -1573,7 +1566,7 @@ typedef struct playerState_s {
 #define WBUTTON_LEANRIGHT   32
 
 // unused
-#define WBUTTON_ADS         64
+#define WBUTTON_EXTRA6      64
 #define WBUTTON_EXTRA7      128
 //----(SA) end
 
@@ -1615,10 +1608,7 @@ typedef enum {
 	TR_GRAVITY_FLOAT,           // super low grav with no gravity acceleration (floating feathers/fabric/leaves/...)
 	TR_GRAVITY_PAUSED,          //----(SA)	has stopped, but will still do a short trace to see if it should be switched back to TR_GRAVITY
 	TR_ACCELERATE,
-	TR_DECCELERATE,
-	// Gordon
-	TR_SPLINE,
-	TR_LINEAR_PATH
+	TR_DECCELERATE
 } trType_t;
 
 typedef struct {
@@ -1706,8 +1696,6 @@ typedef struct entityState_s {
 	aistateEnum_t aiState;
 
 	int animMovetype;       // clients can't derive movetype of other clients for anim scripting system
-
-	int perks;
 
 
 } entityState_t;

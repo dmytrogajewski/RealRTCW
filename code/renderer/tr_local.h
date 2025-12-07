@@ -450,7 +450,8 @@ typedef struct corona_s {
 	vec3_t transformed;         // origin in local coordinate system
 	float scale;                // uses r_flaresize as the baseline (1.0)
 	int id;
-	qboolean visible;           // still send the corona request, even if not visible, for proper fading
+	int flags;                  // '1' is 'visible'
+								// still send the corona request, even if not visible, for proper fading
 } corona_t;
 
 typedef struct dlight_s {
@@ -1568,7 +1569,7 @@ FLARES
 
 void R_ClearFlares( void );
 
-void RB_AddFlare( void *surface, int fogNum, vec3_t point, vec3_t color, float scale, vec3_t normal, int id, qboolean visible );    //----(SA)	added scale.  added id.  added visible
+void RB_AddFlare( void *surface, int fogNum, vec3_t point, vec3_t color, float scale, vec3_t normal, int id, int flags ); // TTimo updated prototype
 void RB_AddDlightFlares( void );
 void RB_RenderFlares( void );
 
@@ -1660,7 +1661,7 @@ void RE_AddPolysToScene( qhandle_t hShader, int numVerts, const polyVert_t *vert
 void RE_AddLightToScene( const vec3_t org, float intensity, float r, float g, float b, int overdraw );
 // done.
 //----(SA)
-void RE_AddCoronaToScene( const vec3_t org, float r, float g, float b, float scale, int id, qboolean visible );
+void RE_AddCoronaToScene( const vec3_t org, float r, float g, float b, float scale, int id, int flags );
 //----(SA)
 void RE_RenderScene( const refdef_t *fd );
 

@@ -2219,7 +2219,7 @@ Called by CL_KeyEvent to handle a keypress
 void CL_KeyDownEvent( int key, unsigned time )
 {
 	char    *kb;
-	//int activeMenu = 0;
+	int activeMenu = 0;
 	keys[key].down = qtrue;
 	keys[key].repeats++;
 	if( keys[key].repeats == 1 )
@@ -2227,7 +2227,7 @@ void CL_KeyDownEvent( int key, unsigned time )
 
 	if( keys[K_ALT].down && key == K_ENTER )
 	{
-	    // don't repeat fullscreen toggle when keys are held down
+		// don't repeat fullscreen toggle when keys are held down
 		if ( keys[K_ENTER].repeats > 1 ) {
 			return;
 		}
@@ -2252,9 +2252,7 @@ void CL_KeyDownEvent( int key, unsigned time )
 			// in cutscenes we need to handle keys specially (pausing not allowed in camera mode)
 			if ( (  key == K_ESCAPE ||
 					key == K_SPACE ||
-					key == K_ENTER ||
-					key == K_PAD0_A ||
-					key == K_PAD0_START ) && qtrue ) {
+					key == K_ENTER ) && qtrue ) {
 				if ( qtrue ) {
 					CL_AddReliableCommand( "cameraInterrupt", qfalse );
 				}
@@ -2288,9 +2286,9 @@ void CL_KeyDownEvent( int key, unsigned time )
 	}
 
 //----(SA)	get the active menu if in ui mode
-	/*if ( Key_GetCatcher( ) & KEYCATCH_UI ) {
+	if ( Key_GetCatcher( ) & KEYCATCH_UI ) {
 		activeMenu = VM_Call( uivm, UI_GET_ACTIVE_MENU );
-	}*/
+	}
 
 	// escape is always handled special
 	if ( key == K_ESCAPE ) {
@@ -2332,15 +2330,14 @@ void CL_KeyDownEvent( int key, unsigned time )
 	} else if ( Key_GetCatcher( ) & KEYCATCH_UI ) {
 		kb = keys[key].binding;
 
-		/*if ( activeMenu == UIMENU_CLIPBOARD ) {
+		if ( activeMenu == UIMENU_CLIPBOARD ) {
+			// any key gets out of clipboard
+			key = K_ESCAPE;
+		} else if ( activeMenu == UIMENU_PREGAME ) {
 			if ( key != K_MOUSE1 ) {
 				return; // eat all keys except mouse click
 			}
-		} else if ( activeMenu == UIMENU_PREGAME ) {
-			if ( key != K_ENTER ) {
-				return; // eat all keys except mouse click
-			}
-		} else*/ {
+		} else {
 
 			// when in the notebook, check for the key bound to "notebook" and allow that as an escape key
 
@@ -2351,15 +2348,7 @@ void CL_KeyDownEvent( int key, unsigned time )
 					}
 				}
 			}
-		} 
-
-					if ( kb ) {
-				if ( !Q_stricmp( "+activate", kb ) ) {
-					if ( VM_Call( uivm, UI_GET_ACTIVE_MENU ) == UIMENU_CLIPBOARD ) {
-						key = K_ESCAPE;
-					}
-				}
-			}
+		}
 
 		if ( uivm ) {
 			VM_Call( uivm, UI_KEY_EVENT, key, qtrue );

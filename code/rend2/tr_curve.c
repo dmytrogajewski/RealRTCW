@@ -1,25 +1,25 @@
 /*
 ===========================================================================
 
-Return to Castle Wolfenstein multiplayer GPL Source Code
+Return to Castle Wolfenstein single player GPL Source Code
 Copyright (C) 1999-2010 id Software LLC, a ZeniMax Media company. 
 
-This file is part of the Return to Castle Wolfenstein multiplayer GPL Source Code (RTCW MP Source Code).  
+This file is part of the Return to Castle Wolfenstein single player GPL Source Code (RTCW SP Source Code).  
 
-RTCW MP Source Code is free software: you can redistribute it and/or modify
+RTCW SP Source Code is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-RTCW MP Source Code is distributed in the hope that it will be useful,
+RTCW SP Source Code is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with RTCW MP Source Code.  If not, see <http://www.gnu.org/licenses/>.
+along with RTCW SP Source Code.  If not, see <http://www.gnu.org/licenses/>.
 
-In addition, the RTCW MP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW MP Source Code.  If not, please request a copy in writing from id Software at the address below.
+In addition, the RTCW SP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW SP Source Code.  If not, please request a copy in writing from id Software at the address below.
 
 If you have questions concerning this license or the applicable additional terms, you may contact in writing id Software LLC, c/o ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
@@ -262,6 +262,7 @@ static void MakeMeshTangentVectors(int width, int height, srfVert_t ctrl[MAX_GRI
 	}
 }
 
+
 static int MakeMeshIndexes(int width, int height, glIndex_t indexes[(MAX_GRID_SIZE-1)*(MAX_GRID_SIZE-1)*2*3])
 {
 	int             i, j;
@@ -373,7 +374,6 @@ R_CreateSurfaceGridMesh
 void R_CreateSurfaceGridMesh(srfBspSurface_t *grid, int width, int height,
 								srfVert_t ctrl[MAX_GRID_SIZE][MAX_GRID_SIZE], float errorTable[2][MAX_GRID_SIZE],
 								int numIndexes, glIndex_t indexes[(MAX_GRID_SIZE-1)*(MAX_GRID_SIZE-1)*2*3]) {
-
 	int i, j;
 	srfVert_t	*vert;
 	vec3_t tmpVec;
@@ -382,10 +382,10 @@ void R_CreateSurfaceGridMesh(srfBspSurface_t *grid, int width, int height,
 	Com_Memset(grid, 0, sizeof(*grid));
 
 #ifdef PATCH_STITCHING
-	grid->widthLodError = /*ri.Hunk_Alloc*/ ri.Z_Malloc( width * 4 );
+	grid->widthLodError = malloc( width * 4 );
 	memcpy( grid->widthLodError, errorTable[0], width * 4 );
 
-	grid->heightLodError = /*ri.Hunk_Alloc*/ ri.Z_Malloc( height * 4 );
+	grid->heightLodError = malloc( height * 4 );
 	memcpy( grid->heightLodError, errorTable[1], height * 4 );
 
 	grid->numIndexes = numIndexes;
@@ -747,3 +747,4 @@ void R_GridInsertRow( srfBspSurface_t *grid, int row, int column, vec3_t point, 
 	grid->lodRadius = lodRadius;
 	VectorCopy( lodOrigin, grid->lodOrigin );
 }
+

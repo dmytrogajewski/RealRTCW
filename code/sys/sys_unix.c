@@ -38,6 +38,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <fcntl.h>
 #include <fenv.h>
 #include <sys/wait.h>
+#include <time.h>
 
 qboolean stdinIsATTY;
 
@@ -47,13 +48,12 @@ static char homePath[ MAX_OSPATH ] = { 0 };
 static const char DEFAULT_XDG_DATA_HOME[] = {'.', 'l', 'o', 'c', 'a', 'l', PATH_SEP, 's', 'h', 'a', 'r', 'e', '\0'};
 #endif
 
-#ifdef STEAM
+#ifndef STANDALONE
 // Used to store the Steam RTCW installation path
 static char steamPath[ MAX_OSPATH ] = { 0 };
 
-// Used to store the Steam RTCW installation path
-static char realsteamPath[ MAX_OSPATH ] = { 0 };
-
+// Used to store the GOG RTCW installation path
+static char gogPath[ MAX_OSPATH ] = { 0 };
 #endif
 
 /*
@@ -119,7 +119,7 @@ char *Sys_DefaultHomePath(void)
 	return homePath;
 }
 
-#ifdef STEAM
+#ifndef STANDALONE
 /*
 ================
 Sys_SteamPath
@@ -144,17 +144,17 @@ char *Sys_SteamPath( void )
 
 	return steamPath;
 }
-	
+
 /*
 ================
-Sys_SteamWorkshopPath
+Sys_GogPath
 ================
 */
-char *Sys_SteamWorkshopPath( void )
+char *Sys_GogPath( void )
 {
-	return realsteamPath;
+	// GOG also doesn't let you install RTCW on Mac/Linux
+	return gogPath;
 }
-
 #endif
 
 /*
@@ -368,6 +368,10 @@ void Sys_ListFilteredFiles( const char *basedir, char *subdirs, char *filter, ch
 		return;
 	}
 
+	if ( basedir[0] == '\0' ) {
+		return;
+	}
+
 	if (strlen(subdirs)) {
 		Com_sprintf( search, sizeof(search), "%s/%s", basedir, subdirs );
 	}
@@ -445,6 +449,11 @@ char **Sys_ListFiles( const char *directory, const char *extension, char *filter
 		listCopy[i] = NULL;
 
 		return listCopy;
+	}
+
+	if ( directory[0] == '\0' ) {
+		*numfiles = 0;
+		return NULL;
 	}
 
 	if ( !extension)
@@ -561,11 +570,15 @@ void Sys_Sleep( int msec )
 	}
 	else
 	{
+		struct timespec req;
+
 		// With nothing to select() on, we can't wait indefinitely
 		if( msec < 0 )
 			msec = 10;
 
-		usleep( msec * 1000 );
+		req.tv_sec = msec/1000;
+		req.tv_nsec = (msec%1000)*1000000;
+		nanosleep(&req, NULL);
 	}
 }
 

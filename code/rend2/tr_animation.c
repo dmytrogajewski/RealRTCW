@@ -1,25 +1,25 @@
 /*
 ===========================================================================
 
-Return to Castle Wolfenstein multiplayer GPL Source Code
+Return to Castle Wolfenstein single player GPL Source Code
 Copyright (C) 1999-2010 id Software LLC, a ZeniMax Media company. 
 
-This file is part of the Return to Castle Wolfenstein multiplayer GPL Source Code (RTCW MP Source Code).  
+This file is part of the Return to Castle Wolfenstein single player GPL Source Code (RTCW SP Source Code).  
 
-RTCW MP Source Code is free software: you can redistribute it and/or modify
+RTCW SP Source Code is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-RTCW MP Source Code is distributed in the hope that it will be useful,
+RTCW SP Source Code is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with RTCW MP Source Code.  If not, see <http://www.gnu.org/licenses/>.
+along with RTCW SP Source Code.  If not, see <http://www.gnu.org/licenses/>.
 
-In addition, the RTCW MP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW MP Source Code.  If not, please request a copy in writing from id Software at the address below.
+In addition, the RTCW SP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW SP Source Code.  If not, please request a copy in writing from id Software at the address below.
 
 If you have questions concerning this license or the applicable additional terms, you may contact in writing id Software LLC, c/o ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
@@ -78,8 +78,7 @@ static int collapse[ MDS_MAX_VERTS ], *pCollapse;
 static int p0, p1, p2;
 static qboolean isTorso, fullTorso;
 static vec4_t m1[4], m2[4];
-// static  vec4_t m3[4], m4[4]; // TTimo unused
-// static  vec4_t tmp1[4], tmp2[4]; // TTimo unused
+//static  vec4_t m3[4], m4[4], tmp1[4], tmp2[4]; // TTimo: unused
 static vec3_t t;
 static refEntity_t lastBoneEntity;
 
@@ -144,6 +143,10 @@ static int R_CullModel( mdsHeader_t *header, trRefEntity_t *ent ) {
 	vec3_t bounds[2];
 	mdsFrame_t  *oldFrame, *newFrame;
 	int i, frameSize;
+	qboolean cullSphere;
+	float radScale;
+
+	cullSphere = qtrue;
 
 	frameSize = (int) ( sizeof( mdsFrame_t ) - sizeof( mdsBoneFrameCompressed_t ) + header->numBones * sizeof( mdsBoneFrameCompressed_t ) );
 
@@ -151,10 +154,21 @@ static int R_CullModel( mdsHeader_t *header, trRefEntity_t *ent ) {
 	newFrame = ( mdsFrame_t * )( ( byte * ) header + header->ofsFrames + ent->e.frame * frameSize );
 	oldFrame = ( mdsFrame_t * )( ( byte * ) header + header->ofsFrames + ent->e.oldframe * frameSize );
 
-	// cull bounding sphere ONLY if this is not an upscaled entity
-	if ( !ent->e.nonNormalizedAxes ) {
+	radScale = 1.0f;
+
+	if ( ent->e.nonNormalizedAxes ) {
+		cullSphere = qfalse;    // by defalut, cull bounding sphere ONLY if this is not an upscaled entity
+
+		// but allow the radius to be scaled if specified
+//		if(ent->e.reFlags & REFLAG_SCALEDSPHERECULL) {
+//			cullSphere = qtrue;
+//			radScale = ent->e.radius;
+//		}
+	}
+
+	if ( cullSphere ) {
 		if ( ent->e.frame == ent->e.oldframe ) {
-			switch ( R_CullLocalPointAndRadius( newFrame->localOrigin, newFrame->radius ) )
+			switch ( R_CullLocalPointAndRadius( newFrame->localOrigin, newFrame->radius * radScale ) )
 			{
 			case CULL_OUT:
 				tr.pc.c_sphere_cull_md3_out++;
@@ -172,11 +186,11 @@ static int R_CullModel( mdsHeader_t *header, trRefEntity_t *ent ) {
 		{
 			int sphereCull, sphereCullB;
 
-			sphereCull  = R_CullLocalPointAndRadius( newFrame->localOrigin, newFrame->radius );
+			sphereCull  = R_CullLocalPointAndRadius( newFrame->localOrigin, newFrame->radius * radScale );
 			if ( newFrame == oldFrame ) {
 				sphereCullB = sphereCull;
 			} else {
-				sphereCullB = R_CullLocalPointAndRadius( oldFrame->localOrigin, oldFrame->radius );
+				sphereCullB = R_CullLocalPointAndRadius( oldFrame->localOrigin, oldFrame->radius * radScale );
 			}
 
 			if ( sphereCull == sphereCullB ) {
@@ -198,6 +212,9 @@ static int R_CullModel( mdsHeader_t *header, trRefEntity_t *ent ) {
 	for ( i = 0 ; i < 3 ; i++ ) {
 		bounds[0][i] = oldFrame->bounds[0][i] < newFrame->bounds[0][i] ? oldFrame->bounds[0][i] : newFrame->bounds[0][i];
 		bounds[1][i] = oldFrame->bounds[1][i] > newFrame->bounds[1][i] ? oldFrame->bounds[1][i] : newFrame->bounds[1][i];
+
+		bounds[0][i] *= radScale;   //----(SA)	added
+		bounds[1][i] *= radScale;   //----(SA)	added
 	}
 
 	switch ( R_CullLocalBox( bounds ) )
@@ -224,6 +241,10 @@ RB_CalcMDSLod
 float RB_CalcMDSLod( refEntity_t *refent, vec3_t origin, float radius, float modelBias, float modelScale ) {
 	float flod, lodScale;
 	float projectedRadius;
+
+	if ( refent->reFlags & REFLAG_FULL_LOD ) {
+		return 1.0f;
+	}
 
 	// compute projected bounding sphere and use that as a criteria for selecting LOD
 
@@ -340,45 +361,42 @@ void R_AddAnimSurfaces( trRefEntity_t *ent ) {
 
 	surface = ( mdsSurface_t * )( (byte *)header + header->ofsSurfaces );
 	for ( i = 0 ; i < header->numSurfaces ; i++ ) {
+		int j;
+
+//----(SA)	blink will change to be an overlay rather than replacing the head texture.
+//		think of it like batman's mask.  the polygons that have eye texture are duplicated
+//		and the 'lids' rendered with polygonoffset over the top of the open eyes.  this gives
+//		minimal overdraw/alpha blending/texture use without breaking the model and causing seams
+		if ( !Q_stricmp( surface->name, "h_blink" ) ) {
+			if ( !( ent->e.renderfx & RF_BLINK ) ) {
+				surface = ( mdsSurface_t * )( (byte *)surface + surface->ofsEnd );
+				continue;
+			}
+		}
+//----(SA)	end
+
 
 		if ( ent->e.customShader ) {
 			shader = R_GetShaderByHandle( ent->e.customShader );
 		} else if ( ent->e.customSkin > 0 && ent->e.customSkin < tr.numSkins ) {
 			skin_t *skin;
-			int j;
 
 			skin = R_GetSkinByHandle( ent->e.customSkin );
 
 			// match the surface name to something in the skin file
 			shader = tr.defaultShader;
-
-			if ( ent->e.renderfx & RF_BLINK ) {
-				const char *s = va( "%s_b", surface->name );   // append '_b' for 'blink'
-				for ( j = 0 ; j < skin->numSurfaces ; j++ ) {
-					if ( !strcmp( skin->surfaces[j].name, s ) ) {
-						shader = skin->surfaces[j].shader;
-						break;
-					}
-				}
-			}
-
-			if ( shader == tr.defaultShader ) {    // blink reference in skin was not found
-				for ( j = 0 ; j < skin->numSurfaces ; j++ ) {
-					// the names have both been lowercased
-					if ( !strcmp( skin->surfaces[j].name, surface->name ) ) {
-						shader = skin->surfaces[j].shader;
-						break;
-					}
+			for ( j = 0 ; j < skin->numSurfaces ; j++ ) {
+				// the names have both been lowercased
+				if ( !strcmp( skin->surfaces[j].name, surface->name ) ) {
+					shader = skin->surfaces[j].shader;
+					break;
 				}
 			}
 
 			if ( shader == tr.defaultShader ) {
 				ri.Printf( PRINT_DEVELOPER, "WARNING: no shader for surface %s in skin %s\n", surface->name, skin->name );
 			} else if ( shader->defaultShader )     {
-				// Suppress warning for "null" shader - it's intentionally used to hide surfaces
-				if ( !strstr( shader->name, "null" ) ) {
-					ri.Printf( PRINT_DEVELOPER, "WARNING: shader %s in skin %s not found\n", shader->name, skin->name );
-				}
+				ri.Printf( PRINT_DEVELOPER, "WARNING: shader %s in skin %s not found\n", shader->name, skin->name );
 			}
 		} else {
 			shader = R_GetShaderByHandle( surface->shaderIndex );
@@ -386,7 +404,8 @@ void R_AddAnimSurfaces( trRefEntity_t *ent ) {
 
 		// don't add third_person objects if not viewing through a portal
 		if ( !personalModel ) {
-			R_AddDrawSurf( (void *)surface, shader, fogNum, qfalse, qfalse, cubemapIndex );
+			// GR - always tessellate these objects
+			R_AddDrawSurf( (void *)surface, shader, fogNum, qfalse, qfalse, cubemapIndex, ATI_TESS_TRUFORM );
 		}
 
 		surface = ( mdsSurface_t * )( (byte *)surface + surface->ofsEnd );
@@ -412,8 +431,10 @@ static ID_INLINE void LocalAddScaledMatrixTransformVectorTranslate( vec3_t in, f
 }
 
 static float LAVangle;
-static float sp, sy, cp, cy;
-//static float    sr, cr;// TTimo: unused
+//static float		sr; // TTimo: unused
+static float sp, sy;
+//static float    cr; // TTimo: unused
+static float cp, cy;
 
 static ID_INLINE void LocalAngleVector( vec3_t angles, vec3_t forward ) {
 	LAVangle = angles[YAW] * ( M_PI * 2 / 360 );
@@ -454,8 +475,8 @@ static ID_INLINE void SLerp_Normal( vec3_t from, vec3_t to, float tt, vec3_t out
 ===============================================================================
 */
 
-// TTimo: const usage would require an explicit cast, non ANSI C
-// see unix/const-arg.c
+// TTimo: const vec_t ** would require explicit casts for ANSI C conformance
+// see unix/const-arg.c in Wolf MP source
 static ID_INLINE void Matrix4MultiplyInto3x3AndTranslation( /*const*/ vec4_t a[4], /*const*/ vec4_t b[4], vec3_t dst[3], vec3_t t ) {
 	dst[0][0] = a[0][0] * b[0][0] + a[0][1] * b[1][0] + a[0][2] * b[2][0] + a[0][3] * b[3][0];
 	dst[0][1] = a[0][0] * b[0][1] + a[0][1] * b[1][1] + a[0][2] * b[2][1] + a[0][3] * b[3][1];
@@ -474,8 +495,8 @@ static ID_INLINE void Matrix4MultiplyInto3x3AndTranslation( /*const*/ vec4_t a[4
 }
 
 // can put an axis rotation followed by a translation directly into one matrix
-// TTimo: const usage would require an explicit cast, non ANSI C
-// see unix/const-arg.c
+// TTimo: const vec_t ** would require explicit casts for ANSI C conformance
+// see unix/const-arg.c in Wolf MP source
 static ID_INLINE void Matrix4FromAxisPlusTranslation( /*const*/ vec3_t axis[3], const vec3_t t, vec4_t dst[4] ) {
 	int i, j;
 	for ( i = 0; i < 3; i++ ) {
@@ -489,8 +510,8 @@ static ID_INLINE void Matrix4FromAxisPlusTranslation( /*const*/ vec3_t axis[3], 
 }
 
 // can put a scaled axis rotation followed by a translation directly into one matrix
-// TTimo: const usage would require an explicit cast, non ANSI C
-// see unix/const-arg.c
+// TTimo: const vec_t ** would require explicit casts for ANSI C conformance
+// see unix/const-arg.c in Wolf MP source
 static ID_INLINE void Matrix4FromScaledAxisPlusTranslation( /*const*/ vec3_t axis[3], const float scale, const vec3_t t, vec4_t dst[4] ) {
 	int i, j;
 
@@ -685,16 +706,7 @@ R_CalcBoneLerp
 void R_CalcBoneLerp( mdsHeader_t *header, const refEntity_t *refent, int boneNum ) {
 	int j;
 
-	if ( !refent || !header || boneNum < 0 || boneNum >= MDS_MAX_BONES ) {
-		return;
-	}
-
-
 	thisBoneInfo = &boneInfo[boneNum];
-
-	if ( !thisBoneInfo ) {
-		return;
-	}
 
 	if ( thisBoneInfo->parent >= 0 ) {
 		parentBone = &bones[ thisBoneInfo->parent ];
@@ -874,8 +886,6 @@ void R_CalcBones( mdsHeader_t *header, const refEntity_t *refent, int *boneList,
 		memset( validBones, 0, header->numBones );
 		lastBoneEntity = *refent;
 
-		// (SA) also reset these counter statics
-//----(SA)	print stats for the complete model (not per-surface)
 		if ( r_bonesDebug->integer == 4 && totalrt ) {
 			ri.Printf( PRINT_ALL, "Lod %.2f  verts %4d/%4d  tris %4d/%4d  (%.2f%%)\n",
 					   lodScale,
@@ -885,7 +895,7 @@ void R_CalcBones( mdsHeader_t *header, const refEntity_t *refent, int *boneList,
 					   totalt,
 					   ( float )( 100.0 * totalrt ) / (float) totalt );
 		}
-//----(SA)	end
+
 		totalrv = totalrt = totalv = totalt = 0;
 
 	}
@@ -1201,7 +1211,7 @@ void RB_SurfaceAnim( mdsSurface_t *surface ) {
 			for ( i = 0; i < surface->numBoneReferences; i++, boneRefs++ ) {
 				bonePtr = &bones[*boneRefs];
 
-				GL_BindToTMU( tr.whiteImage, TB_COLORMAP );
+				GL_BindToTMU(tr.whiteImage, TB_COLORMAP);
 				qglLineWidth( 1 );
 				qglBegin( GL_LINES );
 				for ( j = 0; j < 3; j++ ) {
@@ -1235,7 +1245,7 @@ void RB_SurfaceAnim( mdsSurface_t *surface ) {
 			tempVert = ( float * )( tess.xyz + baseVertex );
 			tempNormal = ( int16_t * )( tess.normal + baseVertex );
 
-			GL_BindToTMU( tr.whiteImage, TB_COLORMAP );
+			GL_BindToTMU(tr.whiteImage, TB_COLORMAP);
 			qglLineWidth( 1 );
 			qglBegin( GL_LINES );
 			qglColor3f( .0,.0,.8 );
@@ -1351,27 +1361,6 @@ int R_GetBoneTag( orientation_t *outTag, mdsHeader_t *mds, int startTagIndex, co
 
 	memcpy( outTag->axis, bones[ pTag->boneIndex ].matrix, sizeof( outTag->axis ) );
 	VectorCopy( bones[ pTag->boneIndex ].translation, outTag->origin );
-
-/* code not functional, not in backend
-	if (r_bonesDebug->integer == 4) {
-		int j;
-		// DEBUG: show the tag position/axis
-		GL_BindToTMU( tr.whiteImage, TB_COLORMAP );
-		qglLineWidth( 2 );
-		qglBegin( GL_LINES );
-		for (j=0; j<3; j++) {
-			VectorClear(vec);
-			vec[j] = 1;
-			qglColor3fv( vec );
-			qglVertex3fv( outTag->origin );
-			VectorMA( outTag->origin, 8, outTag->axis[j], vec );
-			qglVertex3fv( vec );
-		}
-		qglEnd();
-
-		qglLineWidth( 1 );
-	}
-*/
 
 	return i;
 }
@@ -1518,6 +1507,8 @@ R_MDRAddAnimSurfaces
 ==============
 */
 
+int R_ComputeLOD( trRefEntity_t *ent );  // Moved here to not conflict with tr_cmesh
+
 // much stuff in there is just copied from R_AddMd3Surfaces in tr_mesh.c
 
 void R_MDRAddAnimSurfaces( trRefEntity_t *ent ) {
@@ -1630,7 +1621,7 @@ void R_MDRAddAnimSurfaces( trRefEntity_t *ent ) {
 			&& !(ent->e.renderfx & ( RF_NOSHADOW | RF_DEPTHHACK ) )
 			&& shader->sort == SS_OPAQUE )
 		{
-			R_AddDrawSurf( (void *)surface, tr.shadowShader, 0, qfalse, qfalse, 0 );
+			R_AddDrawSurf( (void *)surface, tr.shadowShader, 0, qfalse, qfalse, 0, ATI_TESS_TRUFORM );
 		}
 
 		// projection shadows work fine with personal models
@@ -1639,11 +1630,11 @@ void R_MDRAddAnimSurfaces( trRefEntity_t *ent ) {
 			&& (ent->e.renderfx & RF_SHADOW_PLANE )
 			&& shader->sort == SS_OPAQUE )
 		{
-			R_AddDrawSurf( (void *)surface, tr.projectionShadowShader, 0, qfalse, qfalse, 0 );
+			R_AddDrawSurf( (void *)surface, tr.projectionShadowShader, 0, qfalse, qfalse, 0, ATI_TESS_TRUFORM );
 		}
 
 		if ( !personalModel )
-			R_AddDrawSurf( (void *)surface, shader, fogNum, qfalse, qfalse, cubemapIndex );
+			R_AddDrawSurf( (void *)surface, shader, fogNum, qfalse, qfalse, cubemapIndex, ATI_TESS_TRUFORM );
 
 		surface = (mdrSurface_t *)( (byte *)surface + surface->ofsEnd );
 	}
@@ -1863,3 +1854,4 @@ void MC_UnCompress(float mat[3][4],const unsigned char * comp)
 	val-=1<<(MC_BITS_VECT-1);
 	mat[2][2]=((float)(val))*MC_SCALE_VECT;
 }
+

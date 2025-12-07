@@ -936,7 +936,6 @@ static void SV_InitGameVM( qboolean restart ) {
 }
 
 
-
 /*
 ===================
 SV_RestartGameProgs

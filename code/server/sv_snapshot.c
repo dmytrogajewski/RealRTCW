@@ -505,7 +505,7 @@ notVisible:
 
 		// Ridah, if this entity has changed events, then send it regardless of whether we can see it or not
 		// DHM - Nerve :: not in multiplayer please
-		if ( localClient ) {
+		if ( sv_gametype->integer == GT_SINGLE_PLAYER && localClient ) {
 			if ( ent->r.eventTime == svs.time ) {
 				ent->s.eFlags |= EF_NODRAW;     // don't draw, just process event
 				SV_AddEntToSnapshot( svEnt, ent, eNums );
@@ -783,9 +783,6 @@ void SV_SendClientMessages(void)
 		if(!c->state)
 			continue;       // not connected
 
-		if(svs.time - c->lastSnapshotTime < c->snapshotMsec * com_timescale->value)
-			continue;		// It's not time yet
-
 		if(*c->downloadName)
 			continue;		// Client is downloading, don't send snapshots
 
@@ -799,6 +796,10 @@ void SV_SendClientMessages(void)
 		     (sv_lanForceRate->integer && Sys_IsLANAddress(c->netchan.remoteAddress))))
 		{
 			// rate control for clients not on LAN 
+
+			if(svs.time - c->lastSnapshotTime < c->snapshotMsec * com_timescale->value)
+				continue;		// It's not time yet
+
 			if(SV_RateMsec(c) > 0)
 			{
 				// Not enough time since last packet passed through the line

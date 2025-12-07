@@ -1,25 +1,25 @@
 /*
 ===========================================================================
 
-Return to Castle Wolfenstein multiplayer GPL Source Code
+Return to Castle Wolfenstein single player GPL Source Code
 Copyright (C) 1999-2010 id Software LLC, a ZeniMax Media company. 
 
-This file is part of the Return to Castle Wolfenstein multiplayer GPL Source Code (RTCW MP Source Code).  
+This file is part of the Return to Castle Wolfenstein single player GPL Source Code (RTCW SP Source Code).  
 
-RTCW MP Source Code is free software: you can redistribute it and/or modify
+RTCW SP Source Code is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-RTCW MP Source Code is distributed in the hope that it will be useful,
+RTCW SP Source Code is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with RTCW MP Source Code.  If not, see <http://www.gnu.org/licenses/>.
+along with RTCW SP Source Code.  If not, see <http://www.gnu.org/licenses/>.
 
-In addition, the RTCW MP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW MP Source Code.  If not, please request a copy in writing from id Software at the address below.
+In addition, the RTCW SP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW SP Source Code.  If not, please request a copy in writing from id Software at the address below.
 
 If you have questions concerning this license or the applicable additional terms, you may contact in writing id Software LLC, c/o ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
@@ -92,7 +92,7 @@ void R_SetFog( int fogvar, int var1, int var2, float r, float g, float b, float 
 		glfogsettings[fogvar].color[3]      = 1;
 		glfogsettings[fogvar].start         = var1;
 		glfogsettings[fogvar].end           = var2;
-		if ( density > 1 ) {
+		if ( density >= 1 ) {
 			glfogsettings[fogvar].mode          = GL_LINEAR;
 			glfogsettings[fogvar].drawsky       = qfalse;
 			glfogsettings[fogvar].clearscreen   = qtrue;
@@ -110,10 +110,32 @@ void R_SetFog( int fogvar, int var1, int var2, float r, float g, float b, float 
 		return;
 	}
 
+	// FOG_MAP now used to mean 'no fog'
+	if ( var1 == FOG_MAP ) {
+
+		// transitioning from...
+		if ( glfogsettings[FOG_CURRENT].registered ) {
+			memcpy( &glfogsettings[FOG_LAST], &glfogsettings[FOG_CURRENT], sizeof( glfog_t ) );
+		}
+
+		memcpy( &glfogsettings[FOG_TARGET], &glfogsettings[glfogNum], sizeof( glfog_t ) );
+
+
+		// clear, clear, clear
+		memset( &glfogsettings[FOG_MAP], 0, sizeof( glfog_t ) );
+//		memset(&glfogsettings[FOG_CURRENT], 0, sizeof(glfog_t));
+		memset( &glfogsettings[FOG_TARGET], 0, sizeof( glfog_t ) );
+//		glfogsettings[FOG_CURRENT].registered = qfalse;
+//		glfogsettings[FOG_TARGET].registered = qfalse;
+		glfogNum = FOG_NONE;
+		return;
+	}
+
 	// don't switch to invalid fogs
 	if ( glfogsettings[var1].registered != qtrue ) {
 		return;
 	}
+
 
 	glfogNum = var1;
 
@@ -124,16 +146,23 @@ void R_SetFog( int fogvar, int var1, int var2, float r, float g, float b, float 
 	} else {
 		// if no current fog fall back to world fog
 		// FIXME: handle transition if there is no FOG_MAP fog
-		memcpy( &glfogsettings[FOG_LAST], &glfogsettings[FOG_MAP], sizeof( glfog_t ) );
+//		memcpy(&glfogsettings[FOG_LAST], &glfogsettings[FOG_MAP], sizeof(glfog_t));
+		memcpy( &glfogsettings[FOG_LAST], &glfogsettings[glfogNum], sizeof( glfog_t ) );
 	}
 
 	memcpy( &glfogsettings[FOG_TARGET], &glfogsettings[glfogNum], sizeof( glfog_t ) );
 
-	// setup transition times
-	glfogsettings[FOG_TARGET].startTime = tr.refdef.time;
-	glfogsettings[FOG_TARGET].finishTime = tr.refdef.time + var2;
+	if ( !var2 ) { // instant
+		glfogsettings[FOG_TARGET].startTime = 0;
+		glfogsettings[FOG_TARGET].finishTime = 0;
+		glfogsettings[FOG_TARGET].dirty = 1;
+		glfogsettings[FOG_CURRENT].dirty = 1;
+	} else {
+		// setup transition times
+		glfogsettings[FOG_TARGET].startTime = tr.refdef.time;
+		glfogsettings[FOG_TARGET].finishTime = tr.refdef.time + var2;
+	}
 }
-
 //----(SA) end
 
 /*
@@ -346,7 +375,6 @@ int R_CullLocalBox(vec3_t localBounds[2]) {
 	}
 
 	return CULL_CLIP;       // partially clipped
-
 #else
 	int             j;
 	vec3_t          transformed;
@@ -445,7 +473,7 @@ int R_CullPointAndRadiusEx( const vec3_t pt, float radius, const cplane_t* frust
 	}
 
 	// check against frustum planes
-	for (i = 0 ; i < numPlanes ; i++)
+	for ( i = 0 ; i < numPlanes ; i++ )
 	{
 		frust = &frustum[i];
 
@@ -709,11 +737,6 @@ void R_SetFrameFog( void ) {
 		}
 	}
 
-	// DHM - Nerve :: If fog is not valid, don't use it
-	if ( !glfogsettings[FOG_TARGET].registered ) {
-		return;
-	}
-
 	// still fading
 	if ( glfogsettings[FOG_TARGET].finishTime && glfogsettings[FOG_TARGET].finishTime >= tr.refdef.time ) {
 		float lerpPos;
@@ -760,10 +783,14 @@ void R_SetFrameFog( void ) {
 			// if either fog in the transition clears the screen, clear the background this frame to avoid hall of mirrors
 			glfogsettings[FOG_CURRENT].clearscreen  = ( glfogsettings[FOG_TARGET].clearscreen || glfogsettings[FOG_LAST].clearscreen );
 		}
+
+		glfogsettings[FOG_CURRENT].dirty = 1;
 	} else {
-		// probably usually not necessary to copy the whole thing.
 		// potential FIXME: since this is the most common occurance, diff first and only set changes
+//		if(glfogsettings[FOG_CURRENT].dirty) {
 		memcpy( &glfogsettings[FOG_CURRENT], &glfogsettings[FOG_TARGET], sizeof( glfog_t ) );
+		glfogsettings[FOG_CURRENT].dirty = 0;
+//		}
 	}
 
 
@@ -772,6 +799,10 @@ void R_SetFrameFog( void ) {
 	if ( glfogsettings[FOG_CURRENT].mode == GL_LINEAR ) {
 		if ( glfogsettings[FOG_CURRENT].end < tr.viewParms.zFar ) {
 			tr.viewParms.zFar = glfogsettings[FOG_CURRENT].end;
+		}
+		if ( backEnd.refdef.rdflags & RDF_SNOOPERVIEW ) {
+			tr.viewParms.zFar += 1000;  // zfar out slightly further for snooper.  this works fine with our maps, but could be 'funky' with later maps
+
 		}
 	}
 //	else
@@ -782,7 +813,7 @@ void R_SetFrameFog( void ) {
 		if ( glfogsettings[FOG_CURRENT].mode == GL_LINEAR ) {
 			ri.Printf( PRINT_ALL, "farclip fog - den: %0.1f  calc zFar: %0.1f  fog zfar: %0.1f\n", glfogsettings[FOG_CURRENT].density, tr.viewParms.zFar, glfogsettings[FOG_CURRENT].end );
 		} else {
-			ri.Printf( PRINT_ALL, "density fog - den: %0.4f  calc zFar: %0.1f  fog zFar: %0.1f\n", glfogsettings[FOG_CURRENT].density, tr.viewParms.zFar, glfogsettings[FOG_CURRENT].end );
+			ri.Printf( PRINT_ALL, "density fog - den: %0.6f  calc zFar: %0.1f  fog zFar: %0.1f\n", glfogsettings[FOG_CURRENT].density, tr.viewParms.zFar, glfogsettings[FOG_CURRENT].end );
 		}
 	}
 }
@@ -790,7 +821,7 @@ void R_SetFrameFog( void ) {
 
 /*
 ==============
-SetFarClip
+R_SetFarClip
 ==============
 */
 static void R_SetFarClip( void ) {
@@ -971,7 +1002,7 @@ void R_SetupProjection(viewParms_t *dest, float zProj, float zFar, qboolean comp
 
 	width = xmax - xmin;
 	height = ymax - ymin;
-	
+
 	dest->projectionMatrix[0] = 2 * zProj / width;
 	dest->projectionMatrix[4] = 0;
 	dest->projectionMatrix[8] = (xmax + xmin + 2 * stereoSep) / width;
@@ -1392,6 +1423,8 @@ static qboolean SurfIsOffscreen( const drawSurf_t *drawSurf, vec4_t clipDest[128
 	int fogNum;
 	int dlighted;
 	int pshadowed;
+// GR - tessellation flag
+	int atiTess;
 	vec4_t clip, eye;
 	int i;
 	unsigned int pointOr = 0;
@@ -1399,8 +1432,9 @@ static qboolean SurfIsOffscreen( const drawSurf_t *drawSurf, vec4_t clipDest[128
 
 	R_RotateForViewer();
 
-	R_DecomposeSort( drawSurf->sort, &entityNum, &shader, &fogNum, &dlighted, &pshadowed );
-	RB_BeginSurface( shader, fogNum, drawSurf->cubemapIndex );
+// GR - decompose with tessellation flag
+	R_DecomposeSort( drawSurf->sort, &entityNum, &shader, &fogNum, &dlighted, &pshadowed, &atiTess );
+	RB_BeginSurface( shader, fogNum, drawSurf->cubemapIndex);
 	rb_surfaceTable[ *drawSurf->surface ]( drawSurf->surface );
 
 	assert( tess.numVertexes < 128 );
@@ -1640,7 +1674,7 @@ R_AddDrawSurf
 =================
 */
 void R_AddDrawSurf( surfaceType_t *surface, shader_t *shader,
-			int fogIndex, int dlightMap, int pshadowMap, int cubemap ) {
+					int fogIndex, int dlightMap, int pshadowMap, int cubemap, int atiTess ) {
 	int index;
 
 	// instead of checking for overflow, we just mask the index
@@ -1648,7 +1682,9 @@ void R_AddDrawSurf( surfaceType_t *surface, shader_t *shader,
 	index = tr.refdef.numDrawSurfs & DRAWSURF_MASK;
 	// the sort data is packed into a single 32 bit value so it can be
 	// compared quickly during the qsorting process
+// GR - add tesselation flag to the sort
 	tr.refdef.drawSurfs[index].sort = ( shader->sortedIndex << QSORT_SHADERNUM_SHIFT )
+		| ( atiTess << QSORT_ATI_TESS_SHIFT )
 		| tr.shiftedEntityNum | ( fogIndex << QSORT_FOGNUM_SHIFT ) 
 		| ((int)pshadowMap << QSORT_PSHADOW_SHIFT) | (int)dlightMap;
 	tr.refdef.drawSurfs[index].cubemapIndex = cubemap;
@@ -1661,14 +1697,17 @@ void R_AddDrawSurf( surfaceType_t *surface, shader_t *shader,
 R_DecomposeSort
 =================
 */
+// GR - decompose  with tessellation flag
 void R_DecomposeSort( unsigned sort, int *entityNum, shader_t **shader,
-					int *fogNum, int *dlightMap, int *pshadowMap ) {
+					  int *fogNum, int *dlightMap, int *pshadowMap, int *atiTess ) {
 	*fogNum = ( sort >> QSORT_FOGNUM_SHIFT ) & 31;
 	*shader = tr.sortedShaders[ ( sort >> QSORT_SHADERNUM_SHIFT ) & ( MAX_SHADERS - 1 ) ];
-//	*entityNum = ( sort >> QSORT_ENTITYNUM_SHIFT ) & ( MAX_GENTITIES - 1 );   // (SA) uppded entity count for Wolf to 11 bits
+//	*entityNum = ( sort >> QSORT_REFENTITYNUM_SHIFT ) & ( MAX_GENTITIES - 1 );   // (SA) uppded entity count for Wolf to 11 bits
 	*entityNum = ( sort >> QSORT_REFENTITYNUM_SHIFT ) & REFENTITYNUM_MASK;
 	*pshadowMap = (sort >> QSORT_PSHADOW_SHIFT ) & 1;
 	*dlightMap = sort & 1;
+//GR - extract tessellation flag
+	*atiTess = ( sort >> QSORT_ATI_TESS_SHIFT ) & 1;
 }
 
 /*
@@ -1683,6 +1722,8 @@ void R_SortDrawSurfs( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 	int dlighted;
 	int             pshadowed;
 	int i;
+// GR - tessellation flag
+	int atiTess;
 
 	//ri.Printf(PRINT_ALL, "firstDrawSurf %d numDrawSurfs %d\n", (int)(drawSurfs - tr.refdef.drawSurfs), numDrawSurfs);
 
@@ -1706,7 +1747,8 @@ void R_SortDrawSurfs( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 	// check for any pass through drawing, which
 	// may cause another view to be rendered first
 	for ( i = 0 ; i < numDrawSurfs ; i++ ) {
-		R_DecomposeSort( (drawSurfs+i)->sort, &entityNum, &shader, &fogNum, &dlighted, &pshadowed );
+// GR - decompose with tessellation flag
+		R_DecomposeSort( ( drawSurfs + i )->sort, &entityNum, &shader, &fogNum, &dlighted, &pshadowed, &atiTess );
 
 		if ( shader->sort > SS_PORTAL ) {
 			break;
@@ -1776,7 +1818,7 @@ static void R_AddEntitySurface (int entityNum)
 				return;
 		}
 		shader = R_GetShaderByHandle( ent->e.customShader );
-		R_AddDrawSurf( &entitySurface, shader, R_SpriteFogNum( ent ), 0, 0, 0 /*cubeMap*/ );
+		R_AddDrawSurf( &entitySurface, shader, R_SpriteFogNum( ent ), 0, 0,  0, /*cubeMap*/ ATI_TESS_NONE );
 		break;
 
 	case RT_MODEL:
@@ -1785,7 +1827,7 @@ static void R_AddEntitySurface (int entityNum)
 
 		tr.currentModel = R_GetModelByHandle( ent->e.hModel );
 		if ( !tr.currentModel ) {
-			R_AddDrawSurf( &entitySurface, tr.defaultShader, 0, 0, 0, 0 /*cubeMap*/  );
+			R_AddDrawSurf( &entitySurface, tr.defaultShader, 0, 0, 0, 0, /*cubeMap*/ ATI_TESS_NONE );
 		} else {
 			switch ( tr.currentModel->type ) {
 			case MOD_MESH:
@@ -1807,7 +1849,7 @@ static void R_AddEntitySurface (int entityNum)
 				if ( ( ent->e.renderfx & RF_THIRD_PERSON ) && !tr.viewParms.isPortal ) {
 					break;
 				}
-				R_AddDrawSurf( &entitySurface, tr.defaultShader, 0, 0, 0, 0 );
+				R_AddDrawSurf( &entitySurface, tr.defaultShader, 0, 0, 0, 0, ATI_TESS_NONE );
 				break;
 			default:
 				ri.Error( ERR_DROP, "R_AddEntitySurfaces: Bad modeltype" );
@@ -1818,6 +1860,7 @@ static void R_AddEntitySurface (int entityNum)
 	default:
 		ri.Error( ERR_DROP, "R_AddEntitySurfaces: Bad reType" );
 	}
+
 }
 
 /*
@@ -1967,7 +2010,6 @@ void R_RenderView( viewParms_t *parms ) {
 	// draw main system development information (surface outlines, etc)
 	R_DebugGraphics();
 }
-
 
 void R_RenderDlightCubemaps(const refdef_t *fd)
 {
@@ -2563,7 +2605,7 @@ void R_RenderSunShadowMaps(const refdef_t *fd, int level)
 			VectorMA(point, -ly, fd->viewaxis[2], point);
 			Mat4Transform(lightViewMatrix, point, lightViewPoint);
 			AddPointToBounds(lightViewPoint, lightviewBounds[0], lightviewBounds[1]);
- 
+			
 			// add view far plane
 			lx = splitZFar * tan(fd->fov_x * M_PI / 360.0f);
 			ly = splitZFar * tan(fd->fov_y * M_PI / 360.0f);

@@ -1304,21 +1304,6 @@ void Cvar_Register(vmCvar_t *vmCvar, const char *varName, const char *defaultVal
 {
 	cvar_t  *cv;
 
-	// Validate parameters - prevent NULL or empty cvar names
-	// Also reject "0" which is likely a corrupted pointer
-	if ( !varName || !varName[0] || (varName[0] == '0' && varName[1] == '\0') ) {
-		Com_Printf( S_COLOR_RED "ERROR: Cvar_Register called with NULL, empty, or invalid cvar name ('%s'). Skipping registration.\n", varName ? varName : "NULL" );
-		if ( vmCvar ) {
-			vmCvar->handle = -1;
-			vmCvar->modificationCount = -1;
-		}
-		return;
-	}
-	if ( !defaultValue ) {
-		// Use empty string if defaultValue is NULL
-		defaultValue = "";
-	}
-
 	// There is code in Cvar_Get to prevent CVAR_ROM cvars being changed by the
 	// user. In other words CVAR_ARCHIVE and CVAR_ROM are mutually exclusive
 	// flags. Unfortunately some historical game code (including single player
@@ -1361,10 +1346,8 @@ void Cvar_Register(vmCvar_t *vmCvar, const char *varName, const char *defaultVal
 		cv = Cvar_Get(varName, defaultValue, flags | CVAR_VM_CREATED);
 	}
 
-	// If vmCvar is NULL, we can't update it, but the CVAR itself was registered successfully
-	if (!vmCvar || !cv) {
+	if (!vmCvar)
 		return;
-	}
 
 	vmCvar->handle = cv - cvar_indexes;
 	vmCvar->modificationCount = -1;
@@ -1381,23 +1364,13 @@ updates an interpreted modules' version of a cvar
 */
 void    Cvar_Update( vmCvar_t *vmCvar ) {
 	cvar_t  *cv = NULL;
-	
-	if ( !vmCvar ) {
-		Com_Printf( S_COLOR_RED "ERROR: Cvar_Update called with NULL vmCvar. Skipping update.\n" );
-		return;
-	}
+	assert( vmCvar );
 
 	if ( (unsigned)vmCvar->handle >= cvar_numIndexes ) {
-		Com_Printf( S_COLOR_RED "ERROR: Cvar_Update: handle %d out of range (max: %d). Skipping update.\n", vmCvar->handle, cvar_numIndexes );
-		return;
+		Com_Error( ERR_DROP, "Cvar_Update: handle out of range" );
 	}
 
 	cv = cvar_indexes + vmCvar->handle;
-
-	if ( !cv || !cv->name ) {
-		Com_Printf( S_COLOR_RED "ERROR: Cvar_Update: CVAR at handle %d is invalid or NULL. Skipping update.\n", vmCvar->handle );
-		return;
-	}
 
 	if ( cv->modificationCount == vmCvar->modificationCount ) {
 		return;
@@ -1445,7 +1418,7 @@ void Cvar_Init( void )
 	Com_Memset(cvar_indexes, '\0', sizeof(cvar_indexes));
 	Com_Memset(hashTable, '\0', sizeof(hashTable));
 
-	cvar_cheats = Cvar_Get( "sv_cheats", "0", CVAR_SYSTEMINFO );
+	cvar_cheats = Cvar_Get( "sv_cheats", "1", CVAR_ROM | CVAR_SYSTEMINFO );
 
 	Cmd_AddCommand ("print", Cvar_Print_f);
 	Cmd_AddCommand( "toggle", Cvar_Toggle_f );

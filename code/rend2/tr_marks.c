@@ -1,25 +1,25 @@
 /*
 ===========================================================================
 
-Return to Castle Wolfenstein multiplayer GPL Source Code
+Return to Castle Wolfenstein single player GPL Source Code
 Copyright (C) 1999-2010 id Software LLC, a ZeniMax Media company. 
 
-This file is part of the Return to Castle Wolfenstein multiplayer GPL Source Code (RTCW MP Source Code).  
+This file is part of the Return to Castle Wolfenstein single player GPL Source Code (RTCW SP Source Code).  
 
-RTCW MP Source Code is free software: you can redistribute it and/or modify
+RTCW SP Source Code is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-RTCW MP Source Code is distributed in the hope that it will be useful,
+RTCW SP Source Code is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with RTCW MP Source Code.  If not, see <http://www.gnu.org/licenses/>.
+along with RTCW SP Source Code.  If not, see <http://www.gnu.org/licenses/>.
 
-In addition, the RTCW MP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW MP Source Code.  If not, please request a copy in writing from id Software at the address below.
+In addition, the RTCW SP Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the RTCW SP Source Code.  If not, please request a copy in writing from id Software at the address below.
 
 If you have questions concerning this license or the applicable additional terms, you may contact in writing id Software LLC, c/o ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
@@ -180,7 +180,7 @@ void R_BoxSurfaces_r( mnode_t *node, vec3_t mins, vec3_t maxs, surfaceType_t **l
 		surf = tr.world->surfaces + *mark;
 		// check if the surface has NOIMPACT or NOMARKS set
 		if ( ( surf->shader->surfaceFlags & ( SURF_NOIMPACT | SURF_NOMARKS ) )
-			 || ( surf->shader->contentFlags & CONTENTS_FOG ) ) {
+				|| ( surf->shader->contentFlags & CONTENTS_FOG ) ) {
 			*surfViewCount = tr.viewCount;
 		}
 		// extra check for surfaces to avoid list overflows
@@ -191,11 +191,11 @@ void R_BoxSurfaces_r( mnode_t *node, vec3_t mins, vec3_t maxs, surfaceType_t **l
 				*surfViewCount = tr.viewCount;
 			} else if (DotProduct(surf->cullinfo.plane.normal, dir) < -0.5) {
 				// don't add faces that make sharp angles with the projection direction
-					*surfViewCount = tr.viewCount;
+				*surfViewCount = tr.viewCount;
 			}
 		}
 		else if (*(surf->data) != SF_GRID &&
-			 *(surf->data) != SF_TRIANGLES)
+			*(surf->data) != SF_TRIANGLES)
 			*surfViewCount = tr.viewCount;
 		// check the viewCount because the surface may have
 		// already been added if it spans multiple leafs
@@ -450,7 +450,6 @@ int R_OldMarkFragments( int numPoints, const vec3_t *points, const vec3_t projec
 					v = surf->verts[tri[j]].xyz;
 					VectorMA(v, MARKER_OFFSET, surf->cullPlane.normal, clipPoints[0][j]);
 				}
-
 				// add the fragments of this face
 				R_AddMarkFragments( 3, clipPoints,
 									numPlanes, normals, dists,
@@ -517,8 +516,8 @@ int R_MarkFragments( int orientation, const vec3_t *points, const vec3_t project
 	vec3_t projectionDir;
 	vec3_t v1, v2;
 	float radius;
-	vec3_t center;          // center of original mark
-	int numPoints = 4;              // Ridah, we were only ever passing in 4, so I made this local and used the parameter for the orientation
+	vec3_t center;		// center of original mark
+	int numPoints = 4;	// Ridah, we were only ever passing in 4, so I made this local and used the parameter for the orientation
 	qboolean oldMapping = qfalse;
 
 	if (numPoints <= 0) {
@@ -531,7 +530,6 @@ int R_MarkFragments( int orientation, const vec3_t *points, const vec3_t project
 	// RF, negative maxFragments means we want original mapping
 	if ( maxFragments < 0 ) {
 		maxFragments = -maxFragments;
-		//return R_OldMarkFragments( numPoints, points, projection, maxPoints, pointBuffer, maxFragments, fragmentBuffer );
 		oldMapping = qtrue;
 	}
 
@@ -579,39 +577,12 @@ int R_MarkFragments( int orientation, const vec3_t *points, const vec3_t project
 
 	numsurfaces = 0;
 	R_BoxSurfaces_r( tr.world->nodes, mins, maxs, surfaces, 4096, &numsurfaces, projectionDir );
-	//assert(numsurfaces <= 64);
-	//assert(numsurfaces != 64);
 
 	returnedPoints = 0;
 	returnedFragments = 0;
 
 	// find the closest surface to center the decal there, and wrap around other surfaces
 	if ( !oldMapping ) {
-/*
-		for ( i = 0 ; i < numsurfaces ; i++ ) {
-			if (*surfaces[i] == SF_FACE) {
-				surf = ( srfBspSurface_t * ) surfaces[i];
-				// Ridah, check if this is the closest surface
-				dot = DotProduct( center, surf->cullPlane.normal );
-				dot -= surf->plane.dist;
-				if (!bestdist) {
-					if (dot < 0)
-						bestdist = fabs(dot) + 1000;	// avoid this surface, since the point is behind it
-					else
-						bestdist = dot;
-					VectorCopy( surf->cullPlane.normal, bestnormal );
-					VectorMA( center, -dot, surf->cullPlane.normal, bestCenter );
-				} else if (dot >= 0 && dot < bestdist) {
-					bestdist = dot;
-					VectorCopy( surf->cullPlane.normal, bestnormal );
-					VectorMA( center, -dot, surf->cullPlane.normal, bestCenter );
-				}
-			}
-		}
-		// bestCenter is now the real center
-		VectorCopy( bestCenter, center );
-Com_Printf("bestnormal: %1.1f %1.1f %1.1f \n", bestnormal[0], bestnormal[1], bestnormal[2] );
-*/
 		VectorNegate( bestnormal, bestnormal );
 	}
 

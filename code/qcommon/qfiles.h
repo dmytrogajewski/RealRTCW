@@ -42,7 +42,7 @@ If you have questions concerning this license or the applicable additional terms
 #endif
 
 // surface geometry should not exceed these limits
-#define SHADER_MAX_VERTEXES 40000 // realrtcw increased x10
+#define SHADER_MAX_VERTEXES 4000
 #define SHADER_MAX_INDEXES  ( 6 * SHADER_MAX_VERTEXES )
 
 
@@ -87,14 +87,14 @@ typedef struct {
 #define MD3_IDENT           ( ( '3' << 24 ) + ( 'P' << 16 ) + ( 'D' << 8 ) + 'I' )
 #define MD3_VERSION         15
 
-// limits // RealRTCW doubled
+// limits
 #define MD3_MAX_LODS        3
-#define MD3_MAX_TRIANGLES   16384    // per surface
-#define MD3_MAX_VERTS       8192   // per surface
-#define MD3_MAX_SHADERS     512     // per surface
+#define MD3_MAX_TRIANGLES   8192    // per surface
+#define MD3_MAX_VERTS       4096    // per surface
+#define MD3_MAX_SHADERS     256     // per surface
 #define MD3_MAX_FRAMES      1024    // per model
-#define MD3_MAX_SURFACES    64      // per model
-#define MD3_MAX_TAGS        32      // per frame
+#define MD3_MAX_SURFACES    32      // per model
+#define MD3_MAX_TAGS        16      // per frame
 
 // vertex scales
 #define MD3_XYZ_SCALE       ( 1.0 / 64 )
@@ -554,12 +554,12 @@ typedef struct {
 
 // there shouldn't be any problem with increasing these values at the
 // expense of more memory allocation in the utilities
-//#define	MAX_MAP_MODELS		0x400 // RealRTCW doubled
-#define MAX_MAP_MODELS      0x1000
+//#define	MAX_MAP_MODELS		0x400
+#define MAX_MAP_MODELS      0x800
 #define MAX_MAP_BRUSHES     0x8000
-#define MAX_MAP_ENTITIES    0x1000
+#define MAX_MAP_ENTITIES    0x800
 #define MAX_MAP_ENTSTRING   0x40000
-#define MAX_MAP_SHADERS     0x800
+#define MAX_MAP_SHADERS     0x400
 
 #define MAX_MAP_AREAS       0x100   // MAX_MAP_AREA_BYTES in q_shared must match!
 #define MAX_MAP_FOGS        0x100
@@ -699,8 +699,7 @@ typedef enum {
 	MST_PLANAR,
 	MST_PATCH,
 	MST_TRIANGLE_SOUP,
-	MST_FLARE,
-	MST_FOLIAGE
+	MST_FLARE
 } mapSurfaceType_t;
 
 typedef struct {

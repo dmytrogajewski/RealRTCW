@@ -299,13 +299,21 @@ SV_InitReliableCommands
 void SV_InitReliableCommands( client_t *clients ) {
 	int i;
 	client_t *cl;
+
+	if ( sv_gametype->integer == GT_SINGLE_PLAYER ) {
 		// single player
 		// init the actual player
 		SV_InitReliableCommandsForClient( clients, MAX_RELIABLE_COMMANDS );
 		// all others can only be bots, so are not required
 		for ( i = 1, cl = &clients[1]; i < sv_maxclients->integer; i++, cl++ ) {
-		SV_InitReliableCommandsForClient( cl, MAX_RELIABLE_COMMANDS );  // TODO, make 0's
+			SV_InitReliableCommandsForClient( cl, MAX_RELIABLE_COMMANDS );  // TODO, make 0's
 		}
+	} else {
+		// multiplayer
+		for ( i = 0, cl = clients; i < sv_maxclients->integer; i++, cl++ ) {
+			SV_InitReliableCommandsForClient( clients, MAX_RELIABLE_COMMANDS );
+		}
+	}
 }
 
 /*
@@ -577,10 +585,16 @@ void SV_ChangeMaxClients( void ) {
 
 	// RF, allocate reliable commands for newly created client slots
 	if ( oldMaxClients < sv_maxclients->integer ) {
+		if ( sv_gametype->integer == GT_SINGLE_PLAYER ) {
 			for ( i = oldMaxClients ; i < sv_maxclients->integer ; i++ ) {
 				// must be an AI slot
 				SV_InitReliableCommandsForClient( &svs.clients[i], 0 );
 			}
+		} else {
+			for ( i = oldMaxClients ; i < sv_maxclients->integer ; i++ ) {
+				SV_InitReliableCommandsForClient( &svs.clients[i], MAX_RELIABLE_COMMANDS );
+			}
+		}
 	}
 }
 
@@ -682,31 +696,11 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 
 		// Rafael gameskill
 		static cvar_t   *g_gameskill;
-		static cvar_t   *g_ironchallenge;
-		static cvar_t   *g_nohudchallenge;
-		static cvar_t   *g_nopickupchallenge;
-		static cvar_t   *g_decaychallenge;
 
 		if ( !g_gameskill ) {
 			g_gameskill = Cvar_Get( "g_gameskill", "2", CVAR_SERVERINFO | CVAR_LATCH | CVAR_ARCHIVE );     // (SA) new default '2' (was '1')
 		}
 		// done
-
-		if ( !g_ironchallenge ) {
-			g_ironchallenge = Cvar_Get( "g_ironchallenge", "0", CVAR_SERVERINFO | CVAR_ROM);    
-		}
-
-		if ( !g_nohudchallenge ) {
-			g_nohudchallenge = Cvar_Get( "g_nohudchallenge", "0", CVAR_SERVERINFO | CVAR_ROM  );     
-		}
-
-		if ( !g_nopickupchallenge ) {
-			g_nopickupchallenge = Cvar_Get( "g_nopickupchallenge", "0", CVAR_SERVERINFO | CVAR_ROM );    
-		}
-
-		if ( !g_decaychallenge ) {
-			g_decaychallenge = Cvar_Get( "g_decaychallenge", "0", CVAR_SERVERINFO | CVAR_ROM  );    
-		}
 
 		if ( !g_gametype ) {
 			g_gametype = Cvar_Get( "g_gametype", "0", CVAR_SERVERINFO | CVAR_LATCH | CVAR_ARCHIVE );
@@ -714,6 +708,7 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 		if ( !bot_enable ) {
 			bot_enable = Cvar_Get( "bot_enable", "1", CVAR_LATCH );
 		}
+		if ( g_gametype->integer == 2 ) {
 			if ( sv_maxclients->latchedString ) {
 				// it's been modified, so grab the new value
 				Cvar_Get( "sv_maxclients", "8", 0 );
@@ -724,6 +719,7 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 			if ( !bot_enable->integer ) {
 				Cvar_Set( "bot_enable", "1" );
 			}
+		}
 	}
 	// done.
 
@@ -815,7 +811,13 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 	}
 
 	// Ridah
-	SV_SetExpectedHunkUsage( va( "maps/%s.bsp", server ) );
+	if ( sv_gametype->integer == GT_SINGLE_PLAYER ) {
+		SV_SetExpectedHunkUsage( va( "maps/%s.bsp", server ) );
+	} else {
+		// just set it to a negative number,so the cgame knows not to draw the percent bar
+		Cvar_Set( "com_expectedhunkusage", "-1" );
+	}
+
 	// make sure we are not paused
 	Cvar_Set( "cl_paused", "0" );
 
@@ -868,7 +870,7 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 			char    *denied;
 
 			if ( svs.clients[i].netchan.remoteAddress.type == NA_BOT ) {
-				if ( killBots ) {
+				if ( killBots || Cvar_VariableValue( "g_gametype" ) == GT_SINGLE_PLAYER ) {
 					SV_DropClient( &svs.clients[i], " gametype is Single Player" );      //DAJ added message
 					continue;
 				}
@@ -994,10 +996,6 @@ void SV_Init (void)
 	// Rafael gameskill
 	sv_gameskill = Cvar_Get( "g_gameskill", "1", CVAR_SERVERINFO | CVAR_LATCH );
 	// done
-	sv_ironchallenge = Cvar_Get( "g_ironchallenge", "0", CVAR_SERVERINFO | CVAR_ROM );
-	sv_nohudchallenge = Cvar_Get( "g_nohudchallenge", "0", CVAR_SERVERINFO | CVAR_ROM );
-	sv_nopickupchallenge = Cvar_Get( "g_nopickupchallenge", "0", CVAR_SERVERINFO | CVAR_ROM );
-	sv_decaychallenge = Cvar_Get( "g_decaychallenge", "0", CVAR_SERVERINFO | CVAR_ROM );
 
 	Cvar_Get( "sv_keywords", "", CVAR_SERVERINFO );
 	sv_mapname = Cvar_Get( "mapname", "nomap", CVAR_SERVERINFO | CVAR_ROM );
@@ -1014,7 +1012,7 @@ void SV_Init (void)
 	sv_allowAnonymous = Cvar_Get( "sv_allowAnonymous", "0", CVAR_SERVERINFO );
 
 	// systeminfo
-	Cvar_Get( "sv_cheats", "1", CVAR_SYSTEMINFO );
+	Cvar_Get( "sv_cheats", "1", CVAR_SYSTEMINFO | CVAR_ROM );
 	sv_serverid = Cvar_Get( "sv_serverid", "0", CVAR_SYSTEMINFO | CVAR_ROM );
 //----(SA) VERY VERY TEMPORARY!!!!!!!!!!!
 //----(SA) this is so Activision can test milestones with
