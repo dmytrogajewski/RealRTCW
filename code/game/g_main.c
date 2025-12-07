@@ -38,6 +38,35 @@ If you have questions concerning this license or the applicable additional terms
 #include "ai_strategy.h"
 #include "g_tts.h"
 
+/*
+================
+COM_Eval
+================
+*/
+qboolean COM_Eval( char *cvarname, char *condition, char *cvarvalue ) {
+	qboolean copy = qtrue;
+	int cvar = trap_Cvar_VariableIntegerValue( cvarname );
+	int value = atoi( cvarvalue );
+
+	if ( !Q_stricmp( condition, "==" ) ) {
+		copy = ( cvar == value );
+	} else if ( !Q_stricmp( condition, "!=" ) ) {
+		copy = ( cvar != value );
+	} else if ( !Q_stricmp( condition, "<=" ) ) {
+		copy = ( cvar <= value );
+	} else if ( !Q_stricmp( condition, ">=" ) ) {
+		copy = ( cvar >= value );
+	} else if ( !Q_stricmp( condition, "<" ) ) {
+		copy = ( cvar < value );
+	} else if ( !Q_stricmp( condition, ">" ) ) {
+		copy = ( cvar > value );
+	} else {
+		G_Error( "COM_Eval() Error: Unknown condition, must be ==, !=, <=, >=, < or >.\n" );
+	}
+
+	return copy;
+}
+
 level_locals_t level;
 
 typedef struct {

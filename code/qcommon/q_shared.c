@@ -470,6 +470,113 @@ char *SkipWhitespace( char *data, qboolean *hasNewLines ) {
 	return data;
 }
 
+/*
+==============
+SkipWhitespace2
+
+Parse a token out of a string
+Will never return NULL, just empty strings
+==============
+*/
+char *SkipWhitespace2( char *data ) {
+	int c;
+
+	while ( ( c = *data ) <= ' ' ) {
+		if ( c == '\n' ) {
+			com_lines++;
+			return data;
+		} else if ( c == '\t' ) {
+			return data;
+		} else if ( !c ) {
+			return NULL;
+		}
+		data++;
+	}
+
+	return data;
+}
+
+/*
+================
+COM_Parse2
+================
+*/
+char *COM_Parse2( char **data_p ) {
+	int c = 0, len;
+	char *data;
+
+	data = *data_p;
+	len = 0;
+	com_token[0] = 0;
+
+	// make sure incoming data is valid
+	if ( !data ) {
+		*data_p = NULL;
+		return com_token;
+	}
+
+	// RF, backup the session data so we can unget easily
+	backup_lines = com_lines;
+	backup_text = *data_p;
+
+	while ( 1 )
+	{
+		// skip whitespace
+		data = SkipWhitespace2( data );
+		if ( !data ) {
+			*data_p = NULL;
+			return com_token;
+		}
+
+		c = *data;
+		if ( c == '/' && data[1] == '/' ) {
+		} else if ( c == '/' && data[1] == '*' )   {
+		} else {
+			break;
+		}
+	}
+
+	// handle quoted strings
+	if ( c == '\"' ) {
+		data++;
+		while ( 1 )
+		{
+			c = *data++;
+			if ( c == '\"' || !c ) {
+				com_token[len] = 0;
+				*data_p = ( char * ) data;
+				return com_token;
+			}
+			if ( len < MAX_TOKEN_CHARS ) {
+				com_token[len] = c;
+				len++;
+			}
+		}
+	}
+
+	// parse a regular word
+	do
+	{
+		if ( len < MAX_TOKEN_CHARS ) {
+			com_token[len] = c;
+			len++;
+		}
+		data++;
+		c = *data;
+		if ( c == '\n' ) {
+			com_lines++;
+		}
+	} while ( c > ' ' );
+
+	if ( len == MAX_TOKEN_CHARS ) {
+		len = 0;
+	}
+	com_token[len] = '\0';
+
+	*data_p = ( char * ) data;
+	return com_token;
+}
+
 int COM_Compress( char *data_p ) {
 	char *in, *out;
 	int c;

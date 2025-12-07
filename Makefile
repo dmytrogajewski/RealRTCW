@@ -1544,6 +1544,7 @@ makedirs:
 	@$(MKDIR) $(B)/$(BASEGAME)/game
 	@$(MKDIR) $(B)/$(BASEGAME)/ui
 	@$(MKDIR) $(B)/$(BASEGAME)/qcommon
+	@$(MKDIR) $(B)/$(BASEGAME)/steam
 	@$(MKDIR) $(B)/$(BASEGAME)/vm
 	@$(MKDIR) $(B)/tools/asm
 	@$(MKDIR) $(B)/tools/etc
@@ -2622,6 +2623,7 @@ Q3GOBJ_ = \
   $(B)/$(BASEGAME)/game/ai_squad.o \
   $(B)/$(BASEGAME)/game/ai_strategy.o \
   $(B)/$(BASEGAME)/game/steamshim_child.o \
+  $(B)/$(BASEGAME)/steam/steam.o \
   \
   $(B)/$(BASEGAME)/qcommon/q_math.o \
   $(B)/$(BASEGAME)/qcommon/q_shared.o
@@ -2926,6 +2928,10 @@ $(B)/$(BASEGAME)/qcommon/%.o: $(CMDIR)/%.c
 
 $(B)/$(BASEGAME)/qcommon/%.asm: $(CMDIR)/%.c $(Q3LCC)
 	$(DO_Q3LCC)
+
+$(B)/$(BASEGAME)/steam/%.o: $(MOUNT_DIR)/steam/%.c
+	$(echo_cmd) "STEAM_CC $<"
+	$(Q)$(CC) $(BASEGAME_CFLAGS) -DGAMEDLL -DQAGAME $(SHLIBCFLAGS) $(CFLAGS) $(OPTIMIZEVM) -o $@ -c $<
 
 
 #############################################################################

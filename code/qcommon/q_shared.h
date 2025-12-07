@@ -920,6 +920,7 @@ int Q_isforfilename( int c );       //----(SA)	added
 int     Q_stricmp( const char *s1, const char *s2 );
 int     Q_strncmp( const char *s1, const char *s2, int n );
 int     Q_stricmpn( const char *s1, const char *s2, int n );
+#define Q_strnicmp Q_stricmpn  // alias for compatibility
 char    *Q_strlwr( char *s1 );
 char    *Q_strupr( char *s1 );
 const char	*Q_stristr( const char *s, const char *find);
