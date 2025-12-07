@@ -467,6 +467,10 @@ void Text_Paint( float x, float y, int font, float scale, vec4_t color, const ch
 	}
 }
 
+void Text_SetActiveFont( int font ) {
+	// dummy
+}
+
 void Text_PaintWithCursor( float x, float y, int font, float scale, vec4_t color, const char *text, int cursorPos, char cursor, int limit, int style ) {
 	int len, count;
 	vec4_t newColor;
@@ -1239,7 +1243,7 @@ static void UI_LoadbonusStrings( void ) {
 
 
 void UI_Load( void ) {
-	char lastName[1024];
+	char lastName[1024] = {0};
 	menuDef_t *menu = Menu_GetFocused();
 	char *menuSet = UI_Cvar_VariableString( "ui_menuFiles" );
 	if ( menu && menu->window.name ) {
@@ -1264,7 +1268,7 @@ void UI_Load( void ) {
 
 	UI_LoadMenus( menuSet, qtrue );
 	Menus_CloseAll();
-	Menus_ActivateByName( lastName );
+	Menus_ActivateByName( lastName, qtrue );
 
 }
 
@@ -4292,7 +4296,7 @@ void WM_ActivateLimboChat( void ) {
 	itemDef_t *itemdef;
 
 	Menu_GetFocused();
-	menu = Menus_ActivateByName( "wm_limboChat" );
+	menu = Menus_ActivateByName( "wm_limboChat", qtrue );
 
 	if ( !menu || g_editItem ) {
 		return;
@@ -4922,12 +4926,12 @@ static void UI_RunMenuScript( char **args ) {
 			trap_Cvar_Set( "cl_paused", "1" );
 			trap_Key_SetCatcher( KEYCATCH_UI );
 			Menus_CloseAll();
-			Menus_ActivateByName( "setup_menu2" );
+			Menus_ActivateByName( "setup_menu2", qtrue );
 		} else if ( Q_stricmp( name, "Leave" ) == 0 ) {
 			trap_Cmd_ExecuteText( EXEC_APPEND, "disconnect\n" );
 			trap_Key_SetCatcher( KEYCATCH_UI );
 			Menus_CloseAll();
-			Menus_ActivateByName( "main" );
+			Menus_ActivateByName( "main", qtrue );
 		} else if ( Q_stricmp( name, "ServerSort" ) == 0 ) {
 			int sortColumn;
 			if ( Int_Parse( args, &sortColumn ) ) {
@@ -6829,6 +6833,7 @@ void _UI_Init( qboolean inGameLoad ) {
 	uiInfo.uiDC.drawText = &Text_Paint;
 	uiInfo.uiDC.textWidth = &Text_Width;
 	uiInfo.uiDC.textHeight = &Text_Height;
+	uiInfo.uiDC.textFont = &Text_SetActiveFont;
 	uiInfo.uiDC.registerModel = &trap_R_RegisterModel;
 	uiInfo.uiDC.modelBounds = &trap_R_ModelBounds;
 	uiInfo.uiDC.fillRect = &UI_FillRect;
@@ -7065,14 +7070,14 @@ void _UI_SetActiveMenu( uiMenuCommand_t menu ) {
 			UI_LoadNonIngame();
 			}
 			Menus_CloseAll();
-			Menus_ActivateByName("backgroundmusic"); // not nice, but best way to do it - putting the music in it's own menudef
-			Menus_ActivateByName( "main" );
+			Menus_ActivateByName("backgroundmusic", qtrue); // not nice, but best way to do it - putting the music in it's own menudef
+			Menus_ActivateByName( "main", qtrue );
 			trap_Cvar_VariableStringBuffer( "com_errorMessage", buf, sizeof( buf ) );
 			if ( strlen( buf ) ) {
 #ifdef MISSIONPACK
 				if ( !ui_singlePlayerActive.integer ) {
 #endif  // #ifdef MISSIONPACK
-				Menus_ActivateByName( "error_popmenu" );
+				Menus_ActivateByName( "error_popmenu", qtrue );
 #ifdef MISSIONPACK
 			} else {
 				trap_Cvar_Set( "com_errorMessage", "" );
@@ -7089,7 +7094,7 @@ void _UI_SetActiveMenu( uiMenuCommand_t menu ) {
 
 		case UIMENU_TEAM:
 			trap_Key_SetCatcher( KEYCATCH_UI );
-			Menus_ActivateByName( "team" );
+			Menus_ActivateByName( "team", qtrue );
 			return;
 
 //----(SA)	added
@@ -7100,19 +7105,19 @@ void _UI_SetActiveMenu( uiMenuCommand_t menu ) {
 			trap_Cvar_Set( "g_reloading", "0" );
 
 			trap_Key_SetCatcher( KEYCATCH_UI );
-			Menus_ActivateByName( "main" );
+			Menus_ActivateByName( "main", qtrue );
 			return;
 //----(SA)	end
 
 		case UIMENU_NEED_CD:
 			trap_Key_SetCatcher( KEYCATCH_UI );
-			Menus_ActivateByName( "needcd" );
+			Menus_ActivateByName( "needcd", qtrue );
 //			UI_ConfirmMenu( "Insert the CD", NULL, NeedCDAction );
 			return;
 
 		case UIMENU_BAD_CD_KEY:
 			trap_Key_SetCatcher( KEYCATCH_UI );
-			Menus_ActivateByName( "badcd" );
+			Menus_ActivateByName( "badcd", qtrue );
 //			UI_ConfirmMenu( "Bad CD Key", NULL, NeedCDKeyAction );
 			return;
 
@@ -7123,7 +7128,7 @@ void _UI_SetActiveMenu( uiMenuCommand_t menu ) {
 				UI_LoadNonIngame();
 			}
 			Menus_CloseAll();
-			Menus_ActivateByName( "endofgame" );
+			Menus_ActivateByName( "endofgame", qtrue );
 			//UI_ConfirmMenu( "Bad CD Key", NULL, NeedCDKeyAction );
 			return;
 
@@ -7135,21 +7140,21 @@ void _UI_SetActiveMenu( uiMenuCommand_t menu ) {
 			trap_Key_SetCatcher( KEYCATCH_UI );
 			UI_BuildPlayerList();
 			Menus_CloseAll();
-			Menus_ActivateByName( "ingame" );
+			Menus_ActivateByName( "ingame", qtrue );
 			return;
 
 		case UIMENU_PREGAME:
 			trap_Cvar_Set( "cl_paused", "1" );
 			trap_Key_SetCatcher( KEYCATCH_UI );
 			Menus_CloseAll();
-			Menus_ActivateByName( "pregame" );
+			Menus_ActivateByName( "pregame", qtrue );
 			return;
 
 		case UIMENU_NOTEBOOK:
 			trap_Cvar_Set( "cl_paused", "1" );
 			trap_Key_SetCatcher( KEYCATCH_UI );
 			Menus_CloseAll();
-			Menus_ActivateByName( "notebook" );
+			Menus_ActivateByName( "notebook", qtrue );
 			return;
 
 		case UIMENU_BOOK1:
@@ -7158,14 +7163,14 @@ void _UI_SetActiveMenu( uiMenuCommand_t menu ) {
 			trap_Cvar_Set( "cl_paused", "1" );
 			trap_Key_SetCatcher( KEYCATCH_UI );
 			Menus_CloseAll();
-			Menus_ActivateByName( va( "hbook%d", ( menu - UIMENU_BOOK1 ) + 1 ) );
+			Menus_ActivateByName( va( "hbook%d", ( menu - UIMENU_BOOK1 ) + 1 ), qtrue );
 			return;
 
 		case UIMENU_CLIPBOARD:
 			trap_Cvar_Set( "cl_paused", "1" );
 			trap_Key_SetCatcher( KEYCATCH_UI );
 			Menus_CloseAll();
-			Menus_ActivateByName( "clipboard" );
+			Menus_ActivateByName( "clipboard", qtrue );
 			return;
 
 //		case UIMENU_HELP:
@@ -7177,7 +7182,7 @@ void _UI_SetActiveMenu( uiMenuCommand_t menu ) {
 
 		case UIMENU_BRIEFING:
 			Menus_CloseAll();
-			Menus_ActivateByName( "briefing" );
+			Menus_ActivateByName( "briefing", qtrue );
 			return;
 
 			// NERVE - SMF

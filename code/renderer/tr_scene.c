@@ -108,8 +108,7 @@ void R_AddPolygonSurfaces( void ) {
 	srfPoly_t   *poly;
 
 	tr.currentEntityNum = REFENTITYNUM_WORLD;
-	tr.shiftedEntityNum =
-		((uint64_t)tr.currentEntityNum & REFENTITYNUM_MASK) << QSORT_REFENTITYNUM_SHIFT;
+	tr.shiftedEntityNum = tr.currentEntityNum << QSORT_REFENTITYNUM_SHIFT;
 
 	for ( i = 0, poly = tr.refdef.polys; i < tr.refdef.numPolys ; i++, poly++ ) {
 		sh = R_GetShaderByHandle( poly->hShader );
@@ -375,7 +374,7 @@ void RE_AddLightToScene( const vec3_t org, float intensity, float r, float g, fl
 RE_AddCoronaToScene
 ==============
 */
-void RE_AddCoronaToScene( const vec3_t org, float r, float g, float b, float scale, int id, int flags ) {
+void RE_AddCoronaToScene( const vec3_t org, float r, float g, float b, float scale, int id, qboolean visible ) {
 	corona_t    *cor;
 
 	if ( !tr.registered ) {
@@ -392,7 +391,7 @@ void RE_AddCoronaToScene( const vec3_t org, float r, float g, float b, float sca
 	cor->color[2] = b;
 	cor->scale = scale;
 	cor->id = id;
-	cor->flags = flags;
+	cor->visible = visible;
 }
 
 /*

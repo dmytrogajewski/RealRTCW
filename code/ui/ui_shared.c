@@ -72,6 +72,12 @@ int menuCount = 0;               // how many
 menuDef_t *menuStack[MAX_OPEN_MENUS];
 int openMenuCount = 0;
 
+// TTimo
+// a stack for modal menus only, stores the menus to come back to
+// (an item can be NULL, goes back to main menu / no action required)
+menuDef_t *modalMenuStack[MAX_MODAL_MENUS];
+int modalMenuCount = 0;
+
 static qboolean debugMode = qfalse;
 
 #define DOUBLE_CLICK_DELAY 300
@@ -472,6 +478,7 @@ void String_Init( void ) {
 	strPoolIndex = 0;
 	menuCount = 0;
 	openMenuCount = 0;
+	modalMenuCount = 0;
 	UI_InitMemory();
 	Item_SetupKeywordHash();
 	Menu_SetupKeywordHash();
@@ -1279,7 +1286,7 @@ void Menus_ShowByName( const char *p ) {
 }
 
 void Menus_OpenByName( const char *p ) {
-	Menus_ActivateByName( p );
+	Menus_ActivateByName( p, qtrue );
 }
 
 static void Menu_RunCloseScript( menuDef_t *menu ) {
@@ -4708,7 +4715,7 @@ qboolean Menus_AnyFullScreenVisible( void ) {
 	return qfalse;
 }
 
-menuDef_t *Menus_ActivateByName( const char *p ) {
+menuDef_t *Menus_ActivateByName( const char *p, qboolean modalStack ) {
 	int i;
 	menuDef_t *m = NULL;
 	menuDef_t *focus = Menu_GetFocused();
@@ -4716,8 +4723,11 @@ menuDef_t *Menus_ActivateByName( const char *p ) {
 		if ( Q_stricmp( Menus[i].window.name, p ) == 0 ) {
 			m = &Menus[i];
 			Menus_Activate( m );
-			if ( openMenuCount < MAX_OPEN_MENUS && focus != NULL ) {
-				menuStack[openMenuCount++] = focus;
+			if ( modalStack && m->window.flags & WINDOW_MODAL ) {
+				if ( modalMenuCount >= MAX_MODAL_MENUS ) {
+					Com_Error( ERR_DROP, "MAX_MODAL_MENUS exceeded\n" );
+				}
+				modalMenuStack[modalMenuCount++] = focus;
 			}
 		} else {
 			Menus[i].window.flags &= ~WINDOW_HASFOCUS;
@@ -6520,6 +6530,7 @@ void Menu_PaintAll( void ) {
 
 void Menu_Reset( void ) {
 	menuCount = 0;
+	modalMenuCount = 0;
 }
 
 displayContextDef_t *Display_GetContext(void) {

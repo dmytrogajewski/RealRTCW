@@ -35,6 +35,9 @@ endif
 ifndef BUILD_BSPC
   BUILD_BSPC = 0
 endif
+ifndef BUILD_RENDERER_REND2
+  BUILD_RENDERER_REND2 = 1
+endif
 ifndef ONLY_BSPC
   ONLY_BSPC = 0
 endif
@@ -301,6 +304,7 @@ STEAMSHIMDIR=$(MOUNT_DIR)/steamshim
 CDIR=$(MOUNT_DIR)/client
 SDIR=$(MOUNT_DIR)/server
 RDIR=$(MOUNT_DIR)/renderer
+R2DIR=$(MOUNT_DIR)/rend2
 CMDIR=$(MOUNT_DIR)/qcommon
 SDLDIR=$(MOUNT_DIR)/sdl
 ASMDIR=$(MOUNT_DIR)/asm
@@ -1141,8 +1145,14 @@ endif
 ifneq ($(BUILD_CLIENT),0)
   ifneq ($(USE_RENDERER_DLOPEN),0)
     TARGETS += $(B)/$(CLIENTBIN)$(FULLBINEXT) $(B)/renderer_sp_opengl1_$(SHLIBNAME)
+    ifneq ($(BUILD_RENDERER_REND2), 0)
+      TARGETS += $(B)/renderer_sp_rend2_$(SHLIBNAME)
+    endif
   else
     TARGETS += $(B)/$(CLIENTBIN)$(FULLBINEXT)
+    ifneq ($(BUILD_RENDERER_REND2), 0)
+      TARGETS += $(B)/$(CLIENTBIN)_rend2$(FULLBINEXT)
+    endif
   endif
 endif
 
@@ -1619,6 +1629,8 @@ makedirs:
 	@$(MKDIR) $(B)/client/opus
 	@$(MKDIR) $(B)/client/vorbis
 	@$(MKDIR) $(B)/renderer
+	@$(MKDIR) $(B)/rend2
+	@$(MKDIR) $(B)/rend2/glsl
 	@$(MKDIR) $(B)/ded
 	@$(MKDIR) $(B)/bspc
 	@$(MKDIR) $(B)/$(BASEGAME)/cgame
@@ -2035,8 +2047,6 @@ Q3ROBJ = \
   $(B)/renderer/tr_curve.o \
   $(B)/renderer/tr_flares.o \
   $(B)/renderer/tr_font.o \
-  $(B)/renderer/tr_glsl.o \
-  $(B)/renderer/tr_hdr.o \
   $(B)/renderer/tr_image.o \
   $(B)/renderer/tr_image_bmp.o \
   $(B)/renderer/tr_image_jpg.o \
@@ -2051,14 +2061,11 @@ Q3ROBJ = \
   $(B)/renderer/tr_model.o \
   $(B)/renderer/tr_model_iqm.o \
   $(B)/renderer/tr_noise.o \
-  $(B)/renderer/tr_postprocess.o \
   $(B)/renderer/tr_scene.o \
   $(B)/renderer/tr_shade.o \
-  $(B)/renderer/tr_ssao.o \
   $(B)/renderer/tr_shade_calc.o \
   $(B)/renderer/tr_shader.o \
   $(B)/renderer/tr_shadows.o \
-  $(B)/renderer/tr_shadows_modern.o \
   $(B)/renderer/tr_sky.o \
   $(B)/renderer/tr_surface.o \
   $(B)/renderer/tr_world.o \
@@ -2069,6 +2076,78 @@ endif
 
   Q3ROBJ += $(B)/renderer/sdl_gamma.o
   Q3ROBJ += $(B)/renderer/sdl_glimp.o
+
+Q3R2OBJ = \
+  $(B)/rend2/tr_animation.o \
+  $(B)/rend2/tr_backend.o \
+  $(B)/rend2/tr_bsp.o \
+  $(B)/rend2/tr_cmds.o \
+  $(B)/rend2/tr_curve.o \
+  $(B)/rend2/tr_dsa.o \
+  $(B)/rend2/tr_extramath.o \
+  $(B)/rend2/tr_extensions.o \
+  $(B)/rend2/tr_fbo.o \
+  $(B)/rend2/tr_flares.o \
+  $(B)/rend2/tr_font.o \
+  $(B)/rend2/tr_glsl.o \
+  $(B)/rend2/tr_image.o \
+  $(B)/rend2/tr_image_bmp.o \
+  $(B)/rend2/tr_image_jpg.o \
+  $(B)/rend2/tr_image_pcx.o \
+  $(B)/rend2/tr_image_png.o \
+  $(B)/rend2/tr_image_tga.o \
+  $(B)/rend2/tr_image_dds.o \
+  $(B)/rend2/tr_init.o \
+  $(B)/rend2/tr_light.o \
+  $(B)/rend2/tr_main.o \
+  $(B)/rend2/tr_marks.o \
+  $(B)/rend2/tr_mesh.o \
+  $(B)/rend2/tr_model.o \
+  $(B)/rend2/tr_model_iqm.o \
+  $(B)/rend2/tr_noise.o \
+  $(B)/rend2/tr_postprocess.o \
+  $(B)/rend2/tr_scene.o \
+  $(B)/rend2/tr_shade.o \
+  $(B)/rend2/tr_shade_calc.o \
+  $(B)/rend2/tr_shader.o \
+  $(B)/rend2/tr_shadows.o \
+  $(B)/rend2/tr_sky.o \
+  $(B)/rend2/tr_surface.o \
+  $(B)/rend2/tr_vbo.o \
+  $(B)/rend2/tr_world.o \
+  \
+  $(B)/renderer/sdl_gamma.o \
+  $(B)/renderer/sdl_glimp.o
+
+Q3R2STRINGOBJ = \
+  $(B)/rend2/glsl/bokeh_fp.o \
+  $(B)/rend2/glsl/bokeh_vp.o \
+  $(B)/rend2/glsl/calclevels4x_fp.o \
+  $(B)/rend2/glsl/calclevels4x_vp.o \
+  $(B)/rend2/glsl/depthblur_fp.o \
+  $(B)/rend2/glsl/depthblur_vp.o \
+  $(B)/rend2/glsl/dlight_fp.o \
+  $(B)/rend2/glsl/dlight_vp.o \
+  $(B)/rend2/glsl/down4x_fp.o \
+  $(B)/rend2/glsl/down4x_vp.o \
+  $(B)/rend2/glsl/fogpass_fp.o \
+  $(B)/rend2/glsl/fogpass_vp.o \
+  $(B)/rend2/glsl/generic_fp.o \
+  $(B)/rend2/glsl/generic_vp.o \
+  $(B)/rend2/glsl/lightall_fp.o \
+  $(B)/rend2/glsl/lightall_vp.o \
+  $(B)/rend2/glsl/pshadow_fp.o \
+  $(B)/rend2/glsl/pshadow_vp.o \
+  $(B)/rend2/glsl/shadowfill_fp.o \
+  $(B)/rend2/glsl/shadowfill_vp.o \
+  $(B)/rend2/glsl/shadowmask_fp.o \
+  $(B)/rend2/glsl/shadowmask_vp.o \
+  $(B)/rend2/glsl/ssao_fp.o \
+  $(B)/rend2/glsl/ssao_vp.o \
+  $(B)/rend2/glsl/texturecolor_fp.o \
+  $(B)/rend2/glsl/texturecolor_vp.o \
+  $(B)/rend2/glsl/tonemap_fp.o \
+  $(B)/rend2/glsl/tonemap_vp.o
 
 ifneq ($(USE_RENDERER_DLOPEN), 0)
   Q3ROBJ += \
@@ -2440,11 +2519,22 @@ $(B)/renderer_sp_opengl1_$(SHLIBNAME): $(Q3ROBJ) $(JPGOBJ) $(FTOBJ)
 	$(Q)$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3ROBJ) $(JPGOBJ) $(FTOBJ) \
 		$(THREAD_LIBS) $(LIBSDLMAIN) $(RENDERER_LIBS) $(LIBS)
 
+$(B)/renderer_sp_rend2_$(SHLIBNAME): $(Q3R2OBJ) $(Q3R2STRINGOBJ) $(JPGOBJ) $(FTOBJ)
+	$(echo_cmd) "LD $@"
+	$(Q)$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3R2OBJ) $(Q3R2STRINGOBJ) $(JPGOBJ) $(FTOBJ) \
+		$(THREAD_LIBS) $(LIBSDLMAIN) $(RENDERER_LIBS) $(LIBS)
+
 else
 $(B)/$(CLIENTBIN)$(FULLBINEXT): $(Q3OBJ) $(Q3ROBJ) $(JPGOBJ) $(FTOBJ) $(LIBSDLMAIN)
 	$(echo_cmd) "LD $@"
 	$(Q)$(CXX) $(CLIENT_CFLAGS) $(CFLAGS) $(CLIENT_LDFLAGS) $(LDFLAGS) $(NOTSHLIBLDFLAGS) \
 		-o $@ $(Q3OBJ) $(Q3ROBJ) $(JPGOBJ) $(FTOBJ) \
+		$(LIBSDLMAIN) $(CLIENT_LIBS) $(RENDERER_LIBS) $(LIBS)
+
+$(B)/$(CLIENTBIN)_rend2$(FULLBINEXT): $(Q3OBJ) $(Q3R2OBJ) $(Q3R2STRINGOBJ) $(JPGOBJ) $(FTOBJ) $(LIBSDLMAIN)
+	$(echo_cmd) "LD $@"
+	$(Q)$(CXX) $(CLIENT_CFLAGS) $(CFLAGS) $(CLIENT_LDFLAGS) $(LDFLAGS) $(NOTSHLIBLDFLAGS) \
+		-o $@ $(Q3OBJ) $(Q3R2OBJ) $(Q3R2STRINGOBJ) $(JPGOBJ) $(FTOBJ) \
 		$(LIBSDLMAIN) $(CLIENT_LIBS) $(RENDERER_LIBS) $(LIBS)
 
 endif
@@ -2880,6 +2970,15 @@ $(B)/renderer/%.o: $(RDIR)/%.c
 $(B)/renderer/tr_altivec.o: $(RDIR)/tr_altivec.c
 	$(DO_REF_CC_ALTIVEC)
 
+$(B)/rend2/glsl/%.c: $(R2DIR)/glsl/%.glsl $(STRINGIFY)
+	$(DO_REF_STR)
+
+$(B)/rend2/glsl/%.o: $(B)/rend2/glsl/%.c
+	$(DO_REF_CC)
+	
+$(B)/rend2/%.o: $(R2DIR)/%.c
+	$(DO_REF_CC)
+
 $(B)/renderer/%.o: $(FTDIR)/src/autofit/%.c
 	$(DO_REF_CC)
 
@@ -3082,6 +3181,39 @@ install-steam:
 		echo "Error: Steam directory not found at $$STEAMDIR"; \
 		exit 1; \
 	fi; \
+	echo "Checking for original RTCW game files..."; \
+	ORIGINAL_RTCW="$(HOME)/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/Return to Castle Wolfenstein"; \
+	if [ -d "$$ORIGINAL_RTCW/Main" ]; then \
+		# Copy pak0.pk3 \
+		if [ -f "$$ORIGINAL_RTCW/Main/pak0.pk3" ]; then \
+			if [ ! -f "$$STEAMDIR/main/pak0.pk3" ]; then \
+				echo "Copying pak0.pk3 from original RTCW installation..."; \
+				cp -v "$$ORIGINAL_RTCW/Main/pak0.pk3" "$$STEAMDIR/main/pak0.pk3"; \
+				echo "✓ pak0.pk3 installed"; \
+			else \
+				echo "✓ pak0.pk3 already exists in main/"; \
+			fi; \
+			if [ -d "$$STEAMDIR/Main" ] && [ ! -f "$$STEAMDIR/Main/pak0.pk3" ]; then \
+				cp -v "$$ORIGINAL_RTCW/Main/pak0.pk3" "$$STEAMDIR/Main/pak0.pk3"; \
+			fi; \
+		fi; \
+		# Copy sp_pak files (point release) \
+		for sp_pak in sp_pak1.pk3 sp_pak2.pk3 sp_pak3.pk3 sp_pak4.pk3; do \
+			if [ -f "$$ORIGINAL_RTCW/Main/$$sp_pak" ]; then \
+				if [ ! -f "$$STEAMDIR/main/$$sp_pak" ]; then \
+					echo "Copying $$sp_pak from original RTCW installation..."; \
+					cp -v "$$ORIGINAL_RTCW/Main/$$sp_pak" "$$STEAMDIR/main/$$sp_pak"; \
+				fi; \
+				if [ -d "$$STEAMDIR/Main" ] && [ ! -f "$$STEAMDIR/Main/$$sp_pak" ]; then \
+					cp -v "$$ORIGINAL_RTCW/Main/$$sp_pak" "$$STEAMDIR/Main/$$sp_pak"; \
+				fi; \
+			fi; \
+		done; \
+		echo "✓ Original RTCW game files installed"; \
+	else \
+		echo "Warning: Original RTCW installation not found at $$ORIGINAL_RTCW"; \
+		echo "  The game will not run without pak0.pk3. Please install original RTCW via Steam."; \
+	fi; \
 	echo "Validating build version..."; \
 	BUILD_BIN="$(BR)/$(CLIENTBIN)$(FULLBINEXT)"; \
 	INSTALLED_BIN="$$STEAMDIR/$(CLIENTBIN)$(FULLBINEXT)"; \
@@ -3141,14 +3273,41 @@ install-steam:
 	echo 'exec ./RealRTCW.x86_64 "$$@"' >> "$$STEAMDIR/start_native.sh"; \
 	chmod +x "$$STEAMDIR/start_native.sh"; \
 	if [ -f "$(BR)/renderer_sp_opengl1_$(SHLIBNAME)" ]; then \
-		echo "Installing renderer..."; \
+		echo "Installing renderer (opengl1)..."; \
 		if [ ! -f "$$STEAMDIR/renderer_sp_opengl1_$(SHLIBNAME).original" ]; then \
 			echo "Backing up original renderer..."; \
 			cp "$$STEAMDIR/renderer_sp_opengl1_$(SHLIBNAME)" "$$STEAMDIR/renderer_sp_opengl1_$(SHLIBNAME).original" 2>/dev/null || true; \
 		fi; \
 		cp -v $(BR)/renderer_sp_opengl1_$(SHLIBNAME) "$$STEAMDIR/renderer_sp_opengl1_$(SHLIBNAME)"; \
 	else \
-		echo "Warning: Renderer not found, skipping..."; \
+		echo "Warning: Renderer (opengl1) not found, skipping..."; \
+	fi; \
+	if [ -f "$(BR)/renderer_sp_rend2_$(SHLIBNAME)" ]; then \
+		echo "Installing renderer (rend2)..."; \
+		REND2_SRC="$(BR)/renderer_sp_rend2_$(SHLIBNAME)"; \
+		REND2_DST="$$STEAMDIR/renderer_sp_rend2_$(SHLIBNAME)"; \
+		if [ -f "$$REND2_SRC" ]; then \
+			cp -v "$$REND2_SRC" "$$REND2_DST"; \
+			echo "✓ Renderer (rend2) installed: $$REND2_DST"; \
+		else \
+			echo "Warning: Renderer (rend2) source not found at $$REND2_SRC, skipping..."; \
+		fi; \
+	else \
+		echo "Warning: Renderer (rend2) not found at $(BR)/renderer_sp_rend2_$(SHLIBNAME), skipping..."; \
+		echo "  Make sure you've built the release target first: make release"; \
+	fi; \
+	echo "Creating config file to use rend2 renderer..."; \
+	CONFIG_DIR="$$HOME/.realrtcw"; \
+	mkdir -p "$$CONFIG_DIR"; \
+	CONFIG_FILE="$$CONFIG_DIR/realrtcwconfig.cfg"; \
+	if [ ! -f "$$CONFIG_FILE" ] || ! grep -q "^seta cl_renderer" "$$CONFIG_FILE" 2>/dev/null; then \
+		echo "seta cl_renderer \"rend2\"" >> "$$CONFIG_FILE"; \
+		echo "Added cl_renderer rend2 to config file"; \
+	else \
+		sed -i 's/^seta cl_renderer.*/seta cl_renderer "rend2"/' "$$CONFIG_FILE" 2>/dev/null || \
+		sed -i '' 's/^seta cl_renderer.*/seta cl_renderer "rend2"/' "$$CONFIG_FILE" 2>/dev/null || \
+		echo "Warning: Could not update config file (may need manual edit)"; \
+		echo "Please ensure 'seta cl_renderer \"rend2\"' is in $$CONFIG_FILE"; \
 	fi; \
 	echo "Installing GLSL shaders..."; \
 	if [ -d "$(CURDIR)/code/renderer/shaders" ]; then \
@@ -3175,8 +3334,12 @@ install-steam:
 	echo "echo Enhanced rendering enabled!" >> "$$STEAMDIR/main/realrtcw_enhanced.cfg"; \
 	if [ -f "$(BR)/$(BASEGAME)/cgame.sp.$(SHLIBNAME)" ]; then \
 		echo "Installing game modules..."; \
+		# Create main directory (lowercase) if it doesn't exist \
+		if [ ! -d "$$STEAMDIR/main" ]; then \
+			mkdir -p "$$STEAMDIR/main"; \
+		fi; \
 		QAGAME_SRC="$(BR)/$(BASEGAME)/qagame.sp.$(SHLIBNAME)"; \
-		QAGAME_DST="$$STEAMDIR/Main/qagame.sp.$(SHLIBNAME)"; \
+		QAGAME_DST="$$STEAMDIR/main/qagame.sp.$(SHLIBNAME)"; \
 		if [ -f "$$QAGAME_SRC" ] && [ -f "$$QAGAME_DST" ]; then \
 			SRC_TIME=$$(stat -c %Y "$$QAGAME_SRC" 2>/dev/null || stat -f %m "$$QAGAME_SRC" 2>/dev/null || echo 0); \
 			DST_TIME=$$(stat -c %Y "$$QAGAME_DST" 2>/dev/null || stat -f %m "$$QAGAME_DST" 2>/dev/null || echo 0); \
@@ -3184,9 +3347,15 @@ install-steam:
 				echo "  WARNING: qagame.sp.$(SHLIBNAME) installed version is newer or same!"; \
 			fi; \
 		fi; \
-		cp -v $(BR)/$(BASEGAME)/cgame.sp.$(SHLIBNAME) "$$STEAMDIR/Main/cgame.sp.$(SHLIBNAME)"; \
-		cp -v $(BR)/$(BASEGAME)/qagame.sp.$(SHLIBNAME) "$$STEAMDIR/Main/qagame.sp.$(SHLIBNAME)"; \
-		cp -v $(BR)/$(BASEGAME)/ui.sp.$(SHLIBNAME) "$$STEAMDIR/Main/ui.sp.$(SHLIBNAME)"; \
+		cp -v $(BR)/$(BASEGAME)/cgame.sp.$(SHLIBNAME) "$$STEAMDIR/main/cgame.sp.$(SHLIBNAME)"; \
+		cp -v $(BR)/$(BASEGAME)/qagame.sp.$(SHLIBNAME) "$$STEAMDIR/main/qagame.sp.$(SHLIBNAME)"; \
+		cp -v $(BR)/$(BASEGAME)/ui.sp.$(SHLIBNAME) "$$STEAMDIR/main/ui.sp.$(SHLIBNAME)"; \
+		# Also copy to Main for compatibility if it exists \
+		if [ -d "$$STEAMDIR/Main" ]; then \
+			cp -v $(BR)/$(BASEGAME)/cgame.sp.$(SHLIBNAME) "$$STEAMDIR/Main/cgame.sp.$(SHLIBNAME)" 2>/dev/null || true; \
+			cp -v $(BR)/$(BASEGAME)/qagame.sp.$(SHLIBNAME) "$$STEAMDIR/Main/qagame.sp.$(SHLIBNAME)" 2>/dev/null || true; \
+			cp -v $(BR)/$(BASEGAME)/ui.sp.$(SHLIBNAME) "$$STEAMDIR/Main/ui.sp.$(SHLIBNAME)" 2>/dev/null || true; \
+		fi; \
 		echo "✓ Game modules installed"; \
 	else \
 		echo "Warning: Game modules not found, skipping..."; \
@@ -3311,7 +3480,13 @@ ifneq ($(BUILD_CLIENT),0)
 	$(INSTALL) $(STRIP_FLAG) -m 0755 $(BR)/$(CLIENTBIN)$(FULLBINEXT) $(COPYBINDIR)/$(CLIENTBIN)$(FULLBINEXT)
   ifneq ($(USE_RENDERER_DLOPEN),0)
 	$(INSTALL) $(STRIP_FLAG) -m 0755 $(BR)/renderer_sp_opengl1_$(SHLIBNAME) $(COPYBINDIR)/renderer_sp_opengl1_$(SHLIBNAME)
+    ifneq ($(BUILD_RENDERER_REND2),0)
+	$(INSTALL) $(STRIP_FLAG) -m 0755 $(BR)/renderer_sp_rend2_$(SHLIBNAME) $(COPYBINDIR)/renderer_sp_rend2_$(SHLIBNAME)
+    endif
   else
+    ifneq ($(BUILD_RENDERER_REND2),0)
+	$(INSTALL) $(STRIP_FLAG) -m 0755 $(BR)/$(CLIENTBIN)_rend2$(FULLBINEXT) $(COPYBINDIR)/$(CLIENTBIN)_rend2$(FULLBINEXT)
+    endif
   endif
 endif
 

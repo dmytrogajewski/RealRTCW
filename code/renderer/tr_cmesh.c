@@ -267,51 +267,6 @@ static int R_ComputeLOD( trRefEntity_t *ent ) {
 		lod = 0;
 	}
 
-	// prevent crash when try to load model's LOD levels that may not actually exist
-	int lod_pre = lod;
-	switch (tr.currentModel->type) {
-		case MOD_MDC:
-			// mdc check
-			if (lod >= MD3_MAX_LODS || tr.currentModel->mdc[lod] == NULL) {
-				// find first available LOD to prevent NULL pointer
-				int foundLod = -1;
-				for (int i = 0; i < MD3_MAX_LODS; i++) {
-					if (tr.currentModel->mdc[i] != NULL) {
-						foundLod = i;
-						break;
-					}
-				}
-				lod = (foundLod >= 0) ? foundLod : 0;
-			}
-			break;
-		case MOD_MESH:
-			// md3 check
-			if (lod >= MD3_MAX_LODS || tr.currentModel->md3[lod] == NULL) {
-				// find first available LOD to prevent NULL pointer
-				int foundLod = -1;
-				for (int i = 0; i < MD3_MAX_LODS; i++) {
-					if (tr.currentModel->md3[i] != NULL) {
-						foundLod = i;
-						break;
-					}
-				}
-				lod = (foundLod >= 0) ? foundLod : 0;
-			}
-			break;
-		case MOD_MDR:
-		case MOD_MDS:
-		case MOD_IQM:
-		case MOD_BRUSH:
-		case MOD_BAD:
-		default:
-			break;
-	}
-
-	if (lod != lod_pre) {
-		ri.Printf( PRINT_DEVELOPER, "\"R_ComputeLOD:\" \"%s\" index %d for LOD doesn't exist, change to %d\n",
-			tr.currentModel->name, lod_pre, lod);
-	}
-
 	return lod;
 }
 
@@ -387,13 +342,9 @@ void R_AddMDCSurfaces( trRefEntity_t *ent ) {
 		 || ( ent->e.frame < 0 )
 		 || ( ent->e.oldframe >= tr.currentModel->mdc[0]->numFrames )
 		 || ( ent->e.oldframe < 0 ) ) {
-		static int warnCount = 0;
-		if ( warnCount < 5 ) {
-			ri.Printf( PRINT_WARNING, "R_AddMDCSurfaces: no such frame %d to %d for '%s'\n",
-					   ent->e.oldframe, ent->e.frame,
-					   tr.currentModel->name );
-			warnCount++;
-		}
+		ri.Printf( PRINT_DEVELOPER, "R_AddMDCSurfaces: no such frame %d to %d for '%s'\n",
+				   ent->e.oldframe, ent->e.frame,
+				   tr.currentModel->name );
 		ent->e.frame = 0;
 		ent->e.oldframe = 0;
 	}

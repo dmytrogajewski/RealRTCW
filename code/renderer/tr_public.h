@@ -79,7 +79,7 @@ typedef struct {
 	// done.
 	void ( *AddLightToScene )( const vec3_t org, float intensity, float r, float g, float b, int overdraw );
 //----(SA)
-	void ( *AddCoronaToScene )( const vec3_t org, float r, float g, float b, float scale, int id, int flags );
+	void ( *AddCoronaToScene )( const vec3_t org, float r, float g, float b, float scale, int id, qboolean visible );
 	void ( *SetFog )( int fogvar, int var1, int var2, float r, float g, float b, float density );
 //----(SA)
 	void ( *RenderScene )( const refdef_t *fd );
@@ -87,6 +87,8 @@ typedef struct {
 	void ( *SetColor )( const float *rgba );    // NULL = 1,1,1,1
 	void ( *DrawStretchPic )( float x, float y, float w, float h,
 							  float s1, float t1, float s2, float t2, qhandle_t hShader ); // 0 = white
+	void ( *DrawRotatedPic )( float x, float y, float w, float h,
+							  float s1, float t1, float s2, float t2, qhandle_t hShader, float angle ); // NERVE - SMF
 	void ( *DrawStretchPicGradient )( float x, float y, float w, float h,
 									  float s1, float t1, float s2, float t2, qhandle_t hShader, const float *gradientColor, int gradientType );
 

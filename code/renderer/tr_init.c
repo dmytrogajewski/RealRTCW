@@ -72,7 +72,6 @@ cvar_t	*r_stereoEnabled;
 cvar_t	*r_anaglyphMode;
 
 cvar_t	*r_greyscale;
-cvar_t  *r_gothic;
 
 cvar_t  *r_ignorehwgamma;
 cvar_t  *r_measureOverdraw;
@@ -94,7 +93,6 @@ cvar_t  *r_lodscale;
 cvar_t  *r_norefresh;
 cvar_t  *r_drawentities;
 cvar_t  *r_drawworld;
-cvar_t  *r_drawfoliage;     // ydnar
 cvar_t  *r_speeds;
 cvar_t  *r_fullbright;
 cvar_t  *r_novis;
@@ -141,13 +139,6 @@ cvar_t  *r_lightmap;
 cvar_t  *r_vertexLight;
 cvar_t  *r_uiFullScreen;
 cvar_t  *r_shadows;
-cvar_t  *r_shadowMapSize;
-cvar_t  *r_shadowCascades;
-cvar_t  *r_shadowBias;
-cvar_t  *r_shadowSoftness;
-cvar_t  *r_ssaoRadius;
-cvar_t  *r_ssaoBias;
-cvar_t  *r_ssaoIntensity;
 cvar_t  *r_portalsky;   //----(SA)	added
 cvar_t  *r_flares;
 cvar_t  *r_mode;
@@ -1248,7 +1239,7 @@ void R_Register( void ) {
 	r_fullscreen = ri.Cvar_Get( "r_fullscreen", "1", CVAR_ARCHIVE | CVAR_LATCH );
 #else
 	r_mode = ri.Cvar_Get( "r_mode", "3", CVAR_ARCHIVE | CVAR_LATCH );
-	r_fullscreen = ri.Cvar_Get( "r_fullscreen", "1", CVAR_ARCHIVE | CVAR_LATCH );
+	r_fullscreen = ri.Cvar_Get( "r_fullscreen", "0", CVAR_ARCHIVE | CVAR_LATCH );
 #endif
 	r_noborder = ri.Cvar_Get("r_noborder", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	r_customwidth = ri.Cvar_Get( "r_customwidth", "1600", CVAR_ARCHIVE | CVAR_LATCH );
@@ -1263,8 +1254,6 @@ void R_Register( void ) {
 
 	r_greyscale = ri.Cvar_Get("r_greyscale", "0", CVAR_ARCHIVE | CVAR_LATCH);
 	ri.Cvar_CheckRange(r_greyscale, 0, 1, qfalse);
-
-	r_gothic = ri.Cvar_Get("r_gothic", "0", CVAR_ARCHIVE | CVAR_LATCH);
 
 	//
 	// temporary latched variables that can only change over a restart
@@ -1282,7 +1271,7 @@ void R_Register( void ) {
 	r_lodCurveError = ri.Cvar_Get( "r_lodCurveError", "250", CVAR_ARCHIVE );
 	r_lodbias = ri.Cvar_Get( "r_lodbias", "0", CVAR_ARCHIVE );
 	r_flares = ri.Cvar_Get( "r_flares", "1", CVAR_ARCHIVE );
-	r_znear = ri.Cvar_Get( "r_znear", "2", CVAR_CHEAT );
+	r_znear = ri.Cvar_Get( "r_znear", "4", CVAR_CHEAT );
 	ri.Cvar_CheckRange( r_znear, 0.001f, 200, qfalse );
 	r_zproj = ri.Cvar_Get( "r_zproj", "64", CVAR_ARCHIVE );
 	r_stereoSeparation = ri.Cvar_Get( "r_stereoSeparation", "64", CVAR_ARCHIVE );
@@ -1297,7 +1286,7 @@ void R_Register( void ) {
 	r_dlightScale = ri.Cvar_Get( "r_dlightScale", "1.0", CVAR_ARCHIVE );   //----(SA)	added
 	r_dlightBacks = ri.Cvar_Get( "r_dlightBacks", "1", CVAR_ARCHIVE );
 	r_finish = ri.Cvar_Get( "r_finish", "0", CVAR_ARCHIVE );
-	r_textureMode = ri.Cvar_Get( "r_textureMode", "GL_LINEAR_MIPMAP_NEAREST", CVAR_ARCHIVE );
+	r_textureMode = ri.Cvar_Get( "r_textureMode", "GL_LINEAR_MIPMAP_LINEAR", CVAR_ARCHIVE );
 
 	r_swapInterval = ri.Cvar_Get( "r_swapInterval", "0",
 					CVAR_ARCHIVE | CVAR_LATCH );
@@ -1345,7 +1334,6 @@ void R_Register( void ) {
 
 	r_nocurves = ri.Cvar_Get( "r_nocurves", "0", CVAR_CHEAT );
 	r_drawworld = ri.Cvar_Get( "r_drawworld", "1", CVAR_CHEAT );
-	r_drawfoliage = ri.Cvar_Get( "r_drawfoliage", "1", CVAR_ARCHIVE );  // ydnar
 	r_lightmap = ri.Cvar_Get( "r_lightmap", "0", CVAR_CHEAT );
 	r_portalOnly = ri.Cvar_Get( "r_portalOnly", "0", CVAR_CHEAT );
 
@@ -1389,27 +1377,6 @@ void R_Register( void ) {
 	r_maxpolyverts = ri.Cvar_Get( "r_maxpolyverts", va( "%d", MAX_POLYVERTS ), 0 );
 
 	r_highQualityVideo = ri.Cvar_Get( "r_highQualityVideo", "1", CVAR_ARCHIVE );
-	
-	// Modern rendering features
-	r_glsl = ri.Cvar_Get( "r_glsl", "1", CVAR_ARCHIVE | CVAR_LATCH );
-	r_hdr = ri.Cvar_Get( "r_hdr", "0", CVAR_ARCHIVE | CVAR_LATCH );
-	r_hdrExposure = ri.Cvar_Get( "r_hdrExposure", "0.0", CVAR_ARCHIVE );
-	r_hdrGamma = ri.Cvar_Get( "r_hdrGamma", "2.2", CVAR_ARCHIVE );
-	r_tonemap = ri.Cvar_Get( "r_tonemap", "0", CVAR_ARCHIVE );
-	r_ssao = ri.Cvar_Get( "r_ssao", "0", CVAR_ARCHIVE );
-	r_ssaoRadius = ri.Cvar_Get( "r_ssaoRadius", "0.5", CVAR_ARCHIVE );
-	r_ssaoBias = ri.Cvar_Get( "r_ssaoBias", "0.025", CVAR_ARCHIVE );
-	r_ssaoIntensity = ri.Cvar_Get( "r_ssaoIntensity", "2.0", CVAR_ARCHIVE );
-	r_pbr = ri.Cvar_Get( "r_pbr", "0", CVAR_ARCHIVE | CVAR_LATCH );
-	r_normalMapping = ri.Cvar_Get( "r_normalMapping", "1", CVAR_ARCHIVE );
-	r_specularMapping = ri.Cvar_Get( "r_specularMapping", "1", CVAR_ARCHIVE );
-	
-	// Shadow mapping
-	r_shadowMapSize = ri.Cvar_Get( "r_shadowMapSize", "2048", CVAR_ARCHIVE | CVAR_LATCH );
-	r_shadowCascades = ri.Cvar_Get( "r_shadowCascades", "4", CVAR_ARCHIVE | CVAR_LATCH );
-	r_shadowBias = ri.Cvar_Get( "r_shadowBias", "0.005", CVAR_ARCHIVE );
-	r_shadowSoftness = ri.Cvar_Get( "r_shadowSoftness", "1.0", CVAR_ARCHIVE );
-	
 	// make sure all the commands added here are also
 	// removed in R_Shutdown
 	ri.Cmd_AddCommand( "imagelist", R_ImageList_f );
@@ -1521,12 +1488,6 @@ void R_Init( void ) {
 	R_InitFreeType();
 
 	RB_ZombieFXInit();
-	
-	// Initialize modern rendering features
-	R_InitGLSL();
-	R_InitHDRFramebuffers();
-	R_InitShadowMaps();
-	R_InitSSAO();
 
 	err = qglGetError();
 	if ( err != GL_NO_ERROR ) {
@@ -1566,12 +1527,6 @@ void RE_Shutdown( qboolean destroyWindow ) {
 		R_IssuePendingRenderCommands();
 		R_DeleteTextures();
 	}
-	
-	// Shutdown modern rendering features
-	R_ShutdownSSAO();
-	R_ShutdownShadowMaps();
-	R_ShutdownHDRFramebuffers();
-	R_ShutdownGLSL();
 
 	R_DoneFreeType();
 

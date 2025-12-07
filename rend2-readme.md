@@ -38,9 +38,13 @@ For Win32:
 
 2. Copy the following files into RTCW's install directory: 
      
+     ioWolfMP.x86.exe
      ioWolfSP.x86.exe
-     renderer_opengl1_x86.dll
-     renderer_rend2_x86.dll
+     ioWolfDED.x86.exe
+     renderer_mp_opengl1_x86.dll
+     renderer_mp_rend2_x86.dll
+     renderer_sp_opengl1_x86.dll
+     renderer_sp_rend2_x86.dll
      
    These can be found in build/release-mingw32-x86 after compiling, or bug
    someone to release binaries.
@@ -50,7 +54,7 @@ For Win32:
   RUNNING
 -------------------------------------------------------------------------------
 
-1. Start iowolfsp. (ioWolfSP.x86.exe on Win32)
+1. Start iowolfmp/iowolfsp. (ioWolfMP.x86.exe/ioWolfSP.x86.exe on Win32)
  
 2. Open the console (the default key is tilde ~) and type 
 `/cl_renderer rend2` and press enter
@@ -136,7 +140,7 @@ Cvars for HDR and tonemapping:
                                    r_hdr, r_postprocess, and r_toneMap.
                                      0 - No.
                                      1 - Yes. (default)
-                                     
+
 *  `r_forceAutoExposure`            - Cheat.  Override built-in and map auto
                                    exposure settings and use cvars
                                    r_forceAutoExposureMin and 
@@ -183,6 +187,16 @@ Cvars for advanced material usage:
                                      0 - No. (default)
                                      1 - Use parallax occlusion mapping.
                                      2 - Use relief mapping. (slower)
+
+*  `r_parallaxMapOffset`            - Set the parallax height offset.
+                                     0    - Values map to -255 - 0. (default)
+                                     0.5  - Values map to -127 - 127.
+                                     1.0  - Values map to 0 - 255.
+
+*  `r_parallaxMapShadows`           - Enable self-shadowing on parallax map
+                                   supported materials.
+                                     0 - No. (default)
+                                     1 - Yes.
 
 *  `r_baseSpecular`                 - Set the specular reflectance of materials
                                    which don't include a specular map or
@@ -252,7 +266,7 @@ Cvars for image interpolation and generation:
                                          FCBI without second derivatives)
                                      2 - Okay but slow (normal FCBI)
 
-*  `r_genNormalMaps*                - Naively generate normal maps for all
+*  `r_genNormalMaps`                - Naively generate normal maps for all
                                    textures.
                                      0 - Don't. (default)
                                      1 - Do.
@@ -301,23 +315,6 @@ Cvars for the sunlight and cascaded shadow maps:
                                             2048.
 
 Cvars that you probably don't care about or shouldn't mess with:
-
-*  `r_mergeMultidraws`              - Optimize number of calls to 
-                                   glMultiDrawElements().
-                                     0 - Don't.
-                                     1 - Do some. (default)
-                                     2 - Do more than necessary (eats CPU).
-
-*  `r_mergeLeafSurfaces`            - Merge surfaces that share common materials
-                                   and a common leaf.  Speeds up rendering.
-                                     0 - Don't.
-                                     1 - Do. (default)
-
-*  `r_recalcMD3Normals`             - Recalculate the normals when loading an MD3.
-                                   Fixes normal maps in some cases but looks
-                                   ugly in others.
-                                     0 - Don't. (default)
-                                     1 - Do.
 
 *  `r_depthPrepass`                 - Do a depth-only pass before rendering.
                                    Speeds up rendering in cases where advanced

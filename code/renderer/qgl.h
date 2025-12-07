@@ -189,7 +189,6 @@ extern void (APIENTRYP qglPNTrianglesfATI)(GLenum pname, GLfloat param);
 	GLE(void, StencilOp, GLenum fail, GLenum zfail, GLenum zpass) \
 	GLE(void, TexImage2D, GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid *pixels) \
 	GLE(void, TexParameterf, GLenum target, GLenum pname, GLfloat param) \
-	GLE(void, TexParameterfv, GLenum target, GLenum pname, const GLfloat *params) \
 	GLE(void, TexParameteri, GLenum target, GLenum pname, GLint param) \
 	GLE(void, TexSubImage2D, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid *pixels) \
 	GLE(void, Translatef, GLfloat x, GLfloat y, GLfloat z) \
@@ -227,7 +226,6 @@ extern void (APIENTRYP qglPNTrianglesfATI)(GLenum pname, GLfloat param);
 	GLE(void, ClearDepth, GLclampd depth) \
 	GLE(void, DepthRange, GLclampd near_val, GLclampd far_val) \
 	GLE(void, DrawBuffer, GLenum mode) \
-	GLE(void, ReadBuffer, GLenum mode) \
 	GLE(void, PolygonMode, GLenum face, GLenum mode) \
 
 // OpenGL 1.0/1.1 but not OpenGL 3.2 core profile or OpenGL ES 1.x
@@ -311,7 +309,6 @@ extern void (APIENTRYP qglPNTrianglesfATI)(GLenum pname, GLfloat param);
 	GLE(void, Uniform4f, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3) \
 	GLE(void, Uniform1i, GLint location, GLint v0) \
 	GLE(void, Uniform1fv, GLint location, GLsizei count, const GLfloat *value) \
-	GLE(void, Uniform2fv, GLint location, GLsizei count, const GLfloat *value) \
 	GLE(void, UniformMatrix4fv, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) \
 	GLE(void, ValidateProgram, GLuint program) \
 	GLE(void, VertexAttribPointer, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer) \
@@ -461,13 +458,5 @@ extern int qglMajorVersion, qglMinorVersion;
 extern int qglesMajorVersion, qglesMinorVersion;
 #define QGL_VERSION_ATLEAST( major, minor ) ( qglMajorVersion > major || ( qglMajorVersion == major && qglMinorVersion >= minor ) )
 #define QGLES_VERSION_ATLEAST( major, minor ) ( qglesMajorVersion > major || ( qglesMajorVersion == major && qglesMinorVersion >= minor ) )
-
-// Declare OpenGL function pointers
-#define GLE(ret, name, ...) typedef ret APIENTRY name##proc(__VA_ARGS__); extern name##proc * qgl##name;
-QGL_DESKTOP_1_1_PROCS;
-QGL_1_3_PROCS;
-QGL_2_0_PROCS;
-QGL_ARB_framebuffer_object_PROCS;
-#undef GLE
 
 #endif // __QGL_H__

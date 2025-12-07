@@ -47,11 +47,13 @@ If you have questions concerning this license or the applicable additional terms
 #define MAX_MENUITEMS 512
 #define MAX_COLOR_RANGES 10
 #define MAX_OPEN_MENUS 16
+#define MAX_MODAL_MENUS 16
 
 #define WINDOW_MOUSEOVER        0x00000001  // mouse is over it, non exclusive
 #define WINDOW_HASFOCUS         0x00000002  // has cursor focus, exclusive
 #define WINDOW_VISIBLE          0x00000004  // is visible
 #define WINDOW_GREY             0x00000008  // is visible but grey ( non-active )
+#define WINDOW_MODAL            0x00000010  // modal menu - blocks input to other menus
 #define WINDOW_DECORATION       0x00000010  // for decoration only, no mouse, keyboard, etc..
 #define WINDOW_FADINGOUT        0x00000020  // fading out, non-active
 #define WINDOW_FADINGIN         0x00000040  // fading in
@@ -356,6 +358,7 @@ typedef struct {
 	void ( *drawText )( float x, float y, int font, float scale, vec4_t color, const char *text, float adjust, int limit, int style );
 	int ( *textWidth )( const char *text, int font, float scale, int limit );
 	int ( *textHeight )( const char *text, int font, float scale, int limit );
+	void ( *textFont )( int font );          // NERVE - SMF
 	qhandle_t ( *registerModel )( const char *p );
 	void ( *modelBounds )( qhandle_t model, vec3_t min, vec3_t max );
 	void ( *fillRect )( float x, float y, float w, float h, const vec4_t color );
@@ -482,7 +485,7 @@ void PC_SourceError( int handle, char *format, ... );
 int Menu_Count( void );
 void Menu_New( int handle );
 void Menu_PaintAll( void );
-menuDef_t *Menus_ActivateByName( const char *p );
+menuDef_t *Menus_ActivateByName( const char *p, qboolean modalStack );
 void Menu_Reset( void );
 qboolean Menus_AnyFullScreenVisible( void );
 void  Menus_Activate( menuDef_t *menu );
