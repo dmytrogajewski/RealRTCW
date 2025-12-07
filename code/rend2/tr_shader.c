@@ -768,6 +768,9 @@ static qboolean ParseStage( shaderStage_t *stage, char **text )
 				if (!shader.noPicMip)
 					flags |= IMGFLAG_PICMIP;
 
+				if (shader.characterMip)
+					flags |= IMGFLAG_CHARACTERMIP;
+
 				if (stage->type == ST_NORMALMAP || stage->type == ST_NORMALPARALLAXMAP)
 				{
 					type = IMGTYPE_NORMAL;
@@ -811,6 +814,9 @@ static qboolean ParseStage( shaderStage_t *stage, char **text )
 
 			if (!shader.noPicMip)
 				flags |= IMGFLAG_PICMIP;
+
+			if (shader.characterMip)
+				flags |= IMGFLAG_CHARACTERMIP;
 
 			if (stage->type == ST_NORMALMAP || stage->type == ST_NORMALPARALLAXMAP)
 			{
@@ -866,6 +872,9 @@ static qboolean ParseStage( shaderStage_t *stage, char **text )
 
 					if (!shader.noPicMip)
 						flags |= IMGFLAG_PICMIP;
+
+					if (shader.characterMip)
+						flags |= IMGFLAG_CHARACTERMIP;
 
 					stage->bundle[0].image[num] = R_FindImageFile( token, IMGTYPE_COLORALPHA, flags );
 					if ( !stage->bundle[0].image[num] )
@@ -2093,6 +2102,12 @@ static qboolean ParseShader( char **text )
 		else if ( !Q_stricmp( token, "nopicmip" ) )
 		{
 			shader.noPicMip = qtrue;
+			continue;
+		}
+		// character picmip adjustment
+		else if ( !Q_stricmp( token, "picmip2" ) )
+		{
+			shader.characterMip = qtrue;
 			continue;
 		}
 		// polygonOffset

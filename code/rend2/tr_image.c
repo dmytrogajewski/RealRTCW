@@ -1538,6 +1538,7 @@ static qboolean RawImage_ScaleToPower2( byte **data, int *inout_width, int *inou
 	qboolean picmip = flags & IMGFLAG_PICMIP;
 	qboolean mipmap = flags & IMGFLAG_MIPMAP;
 	qboolean clampToEdge = flags & IMGFLAG_CLAMPTOEDGE;
+	int effectivePicmip = (flags & IMGFLAG_CHARACTERMIP) ? r_picmip2->integer : r_picmip->integer;
 	qboolean scaled;
 #if 0
 	static int rmse_saved = 0;
@@ -1644,8 +1645,8 @@ static qboolean RawImage_ScaleToPower2( byte **data, int *inout_width, int *inou
 	// perform optional picmip operation
 	//
 	if ( picmip ) {
-		scaled_width >>= r_picmip->integer;
-		scaled_height >>= r_picmip->integer;
+		scaled_width >>= effectivePicmip;
+		scaled_height >>= effectivePicmip;
 	}
 
 	//
@@ -2176,6 +2177,7 @@ image_t *R_CreateImage2( const char *name, byte *pic, int width, int height, GLe
 	qboolean    cubemap = !!(flags & IMGFLAG_CUBEMAP);
 	qboolean    picmip = !!(flags & IMGFLAG_PICMIP);
 	qboolean    lastMip;
+	int         effectivePicmip = (flags & IMGFLAG_CHARACTERMIP) ? r_picmip2->integer : r_picmip->integer;
 	GLenum textureTarget = cubemap ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
 	GLenum dataFormat;
 
@@ -2219,7 +2221,7 @@ image_t *R_CreateImage2( const char *name, byte *pic, int width, int height, GLe
 			scaled = RawImage_ScaleToPower2(&pic, &width, &height, type, flags, &resampledBuffer);
 		else if (pic && picmip)
 		{
-			for (miplevel = r_picmip->integer; miplevel > 0 && numMips > 1; miplevel--, numMips--)
+			for (miplevel = effectivePicmip; miplevel > 0 && numMips > 1; miplevel--, numMips--)
 			{
 				int size = CalculateMipSize(width, height, picFormat);
 				width = MAX(1, width >> 1);

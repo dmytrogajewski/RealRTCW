@@ -115,6 +115,7 @@ typedef enum
 	IMGFLAG_NOLIGHTSCALE   = 0x0020,
 	IMGFLAG_CLAMPTOEDGE    = 0x0040,
 	IMGFLAG_GENNORMALMAP   = 0x0080,
+	IMGFLAG_CHARACTERMIP   = 0x0100,	// use r_picmip2 instead of r_picmip
 } imgFlags_t;
 
 typedef struct image_s {
@@ -517,6 +518,7 @@ typedef struct shader_s {
 	qboolean	polygonOffset;			// set for decals and other items that must be offset 
 	qboolean	noMipMaps;				// for console fonts, 2D elements, etc.
 	qboolean	noPicMip;				// for images that must always be full resolution
+	qboolean    characterMip;           // use alternate picmip value (r_picmip2)
 
 	fogPass_t	fogPass;				// draw a blended pass, possibly with depth test equals
 
@@ -1924,6 +1926,7 @@ extern	cvar_t	*r_singleShader;				// make most world faces use default shader
 extern	cvar_t	*r_roundImagesDown;
 extern	cvar_t	*r_colorMipLevels;				// development aid to see texture mip usage
 extern	cvar_t	*r_picmip;						// controls picmip values
+extern  cvar_t  *r_picmip2;                      // alternate picmip for character skins
 extern	cvar_t	*r_finish;
 extern	cvar_t	*r_textureMode;
 extern	cvar_t	*r_offsetFactor;
