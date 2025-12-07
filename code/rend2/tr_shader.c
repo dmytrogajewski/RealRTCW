@@ -2086,6 +2086,109 @@ static qboolean ParseShader( char **text )
 			SkipRestOfLine( text );
 			continue;
 		}
+		// implicitMap - implicit diffuse map
+		else if ( !Q_stricmp( token, "implicitMap" ) ) {
+			image_t *image;
+			token = COM_ParseExt( text, qfalse );
+			if ( token[0] == '-' ) {
+				// use shader name
+				image = R_FindImageFile( shader.name, IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP | IMGFLAG_PICMIP | IMGFLAG_GENNORMALMAP );
+			} else {
+				image = R_FindImageFile( token, IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP | IMGFLAG_PICMIP | IMGFLAG_GENNORMALMAP );
+			}
+
+			if ( !image ) {
+				// Try fixing path for player models in implicitMap too
+				if ( token[0] != '-' && !strncmp(token, "models/", 7) && strncmp(token, "models/players/", 15) ) {
+					char fixName[MAX_QPATH];
+					Com_sprintf(fixName, sizeof(fixName), "models/players/%s", token + 7);
+					image = R_FindImageFile( fixName, IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP | IMGFLAG_PICMIP | IMGFLAG_GENNORMALMAP );
+				}
+			}
+
+			if ( !image ) {
+				ri.Printf( PRINT_DEVELOPER, "WARNING: implicitMap image not found for shader %s, using default\n", shader.name );
+				image = tr.defaultImage;
+			}
+
+			if ( shader.lightmapIndex >= 0 ) {
+				if ( s + 2 > MAX_SHADER_STAGES ) {
+					ri.Printf( PRINT_WARNING, "WARNING: too many stages in shader %s (max is %i)\n", shader.name, MAX_SHADER_STAGES );
+					return qfalse;
+				}
+				// Lightmap stage
+				stages[s].bundle[0].image[0] = tr.lightmaps[shader.lightmapIndex];
+				stages[s].bundle[0].isLightmap = qtrue;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_IDENTITY;
+				stages[s].stateBits = GLS_DEFAULT;
+				s++;
+				// Diffuse stage
+				stages[s].bundle[0].image[0] = image;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_IDENTITY;
+				stages[s].stateBits = GLS_DSTBLEND_ZERO | GLS_SRCBLEND_DST_COLOR;
+				s++;
+			} else {
+				if ( s >= MAX_SHADER_STAGES ) {
+					ri.Printf( PRINT_WARNING, "WARNING: too many stages in shader %s (max is %i)\n", shader.name, MAX_SHADER_STAGES );
+					return qfalse;
+				}
+				stages[s].bundle[0].image[0] = image;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_LIGHTING_DIFFUSE;
+				stages[s].stateBits = GLS_DEFAULT;
+				s++;
+			}
+			continue;
+		}
+		// implicitMask - implicit diffuse map with alpha testing
+		else if ( !Q_stricmp( token, "implicitMask" ) ) {
+			image_t *image;
+			token = COM_ParseExt( text, qfalse );
+			if ( token[0] == '-' ) {
+				// use shader name
+				image = R_FindImageFile( shader.name, IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP | IMGFLAG_PICMIP | IMGFLAG_GENNORMALMAP );
+			} else {
+				image = R_FindImageFile( token, IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP | IMGFLAG_PICMIP | IMGFLAG_GENNORMALMAP );
+			}
+
+			if ( !image ) {
+				ri.Printf( PRINT_DEVELOPER, "WARNING: implicitMask image not found for shader %s, using default\n", shader.name );
+				image = tr.defaultImage;
+			}
+
+			if ( shader.lightmapIndex >= 0 ) {
+				if ( s + 2 > MAX_SHADER_STAGES ) {
+					ri.Printf( PRINT_WARNING, "WARNING: too many stages in shader %s (max is %i)\n", shader.name, MAX_SHADER_STAGES );
+					return qfalse;
+				}
+				// Lightmap stage
+				stages[s].bundle[0].image[0] = tr.lightmaps[shader.lightmapIndex];
+				stages[s].bundle[0].isLightmap = qtrue;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_IDENTITY;
+				stages[s].stateBits = GLS_DEFAULT;
+				s++;
+				// Diffuse stage
+				stages[s].bundle[0].image[0] = image;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_IDENTITY;
+				stages[s].stateBits = GLS_DSTBLEND_ZERO | GLS_SRCBLEND_DST_COLOR | GLS_ATEST_GE_80;
+				s++;
+			} else {
+				if ( s >= MAX_SHADER_STAGES ) {
+					ri.Printf( PRINT_WARNING, "WARNING: too many stages in shader %s (max is %i)\n", shader.name, MAX_SHADER_STAGES );
+					return qfalse;
+				}
+				stages[s].bundle[0].image[0] = image;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_LIGHTING_DIFFUSE;
+				stages[s].stateBits = GLS_DEFAULT | GLS_ATEST_GE_80;
+				s++;
+			}
+			continue;
+		}
 		// skip stuff that only q3map or the server needs
 		else if ( !Q_stricmp( token, "surfaceParm" ) ) {
 			ParseSurfaceParm( text );
@@ -3754,6 +3857,11 @@ shader_t *R_FindShaderEx( const char *name, int lightmapIndex, qboolean mipRawIm
 		return tr.defaultShader;
 	}
 
+	// Special handling for "null" shader to prevent checkerboard rendering
+	if ( strstr( name, "null" ) || !Q_stricmp( name, "models/players/marines/null" ) ) {
+		return R_FindShader( "textures/common/nodraw", lightmapIndex, mipRawImage );
+	}
+
 	// use (fullbright) vertex lighting if the bsp file doesn't have
 	// lightmaps
 	if ( lightmapIndex >= 0 && lightmapIndex >= tr.numLightmaps ) {
@@ -3828,9 +3936,22 @@ shader_t *R_FindShaderEx( const char *name, int lightmapIndex, qboolean mipRawIm
 
 		image = R_FindImageFile( name, IMGTYPE_COLORALPHA, flags );
 		if ( !image ) {
-			ri.Printf( PRINT_DEVELOPER, "Couldn't find image file for shader %s\n", name );
-			shader.defaultShader = qtrue;
-			return FinishShader();
+			// Try fixing path for player models if missing "players" directory in path
+			// This handles cases where skin files reference "models/char/..." instead of "models/players/char/..."
+			if ( !strncmp(name, "models/", 7) && strncmp(name, "models/players/", 15) ) {
+				char fixName[MAX_QPATH];
+				Com_sprintf(fixName, sizeof(fixName), "models/players/%s", name + 7);
+				image = R_FindImageFile( fixName, IMGTYPE_COLORALPHA, flags );
+				if ( image ) {
+					ri.Printf( PRINT_DEVELOPER, "Found image with fixed path: %s\n", fixName );
+				}
+			}
+		}
+
+		if ( !image ) {
+			ri.Printf( PRINT_DEVELOPER, "Couldn't find image file for shader %s, using default\n", name );
+			// Use default image instead of failing completely - this allows textures to still render
+			image = tr.defaultImage;
 		}
 	}
 

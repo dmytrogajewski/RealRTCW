@@ -375,7 +375,10 @@ void R_AddAnimSurfaces( trRefEntity_t *ent ) {
 			if ( shader == tr.defaultShader ) {
 				ri.Printf( PRINT_DEVELOPER, "WARNING: no shader for surface %s in skin %s\n", surface->name, skin->name );
 			} else if ( shader->defaultShader )     {
-				ri.Printf( PRINT_DEVELOPER, "WARNING: shader %s in skin %s not found\n", shader->name, skin->name );
+				// Suppress warning for "null" shader - it's intentionally used to hide surfaces
+				if ( !strstr( shader->name, "null" ) ) {
+					ri.Printf( PRINT_DEVELOPER, "WARNING: shader %s in skin %s not found\n", shader->name, skin->name );
+				}
 			}
 		} else {
 			shader = R_GetShaderByHandle( surface->shaderIndex );

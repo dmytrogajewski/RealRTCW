@@ -1,0 +1,16 @@
+// Alias the missing trench blink placeholder to the existing infantry blink texture.
+// This avoids runtime warnings without touching renderer code.
+
+models/players/infantryss/i_head_blinkVOID
+{
+	nopicmip
+	nomipmaps
+	cull disable
+
+	{
+		map models/players/infantryss/i_head_blink.tga
+		blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+		rgbGen vertex
+	}
+}
+
