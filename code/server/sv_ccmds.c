@@ -269,7 +269,8 @@ static void SV_Map_f( void ) {
 		Cvar_SetValue( "g_gametype", GT_SINGLE_PLAYER );
 		Cvar_SetValue( "g_doWarmup", 0 );
 		// may not set sv_maxclients directly, always set latched
-		Cvar_SetLatched( "sv_maxclients", "32" ); // Ridah, modified this
+		// RealRTCW: use MAX_SP_CLIENTS (128) for single-player AI entities
+		Cvar_SetLatched( "sv_maxclients", "128" );
 		cmd += 2;
 		killBots = qtrue;
 		if ( !Q_stricmp( cmd, "devmap" ) ) {
@@ -286,7 +287,7 @@ static void SV_Map_f( void ) {
 			killBots = qfalse;
 		}
 		if ( sv_gametype->integer == GT_SINGLE_PLAYER ) {
-			Cvar_SetValue( "g_gametype", GT_FFA );
+			Cvar_SetValue( "g_gametype", GT_NONE );
 		}
 	}
 

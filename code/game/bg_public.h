@@ -194,13 +194,8 @@ typedef enum {
 #endif
 
 typedef enum {
-	GT_FFA,             // free for all (iortcw compatibility)
-	GT_TOURNAMENT,      // one on one tournament
-	GT_SINGLE_PLAYER,   // single player tournament
-	GT_TEAM,            // team deathmatch
-	GT_CTF,             // capture the flag
-	GT_WOLF,            // DHM - Nerve :: Wolfenstein Multiplayer
-	// RealRTCW additions
+	GT_NONE,            // no game mode (iortcw: was GT_FFA)
+	GT_SINGLE_PLAYER,   // single player (must be 1 for save compatibility)
 	GT_GOTHIC,          // castle gothicstein
 	GT_SURVIVAL,        // survival
 	GT_MAX_GAME_TYPE

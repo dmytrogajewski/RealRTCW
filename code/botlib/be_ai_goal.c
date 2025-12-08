@@ -88,15 +88,10 @@ typedef struct campspot_s
 
 //FIXME: these are game specific
 typedef enum {
-	GT_FFA,             // free for all
-	GT_TOURNAMENT,      // one on one tournament
-	GT_SINGLE_PLAYER,   // single player tournament
-
-	//-- team games go after this --
-
-	GT_TEAM,            // team deathmatch
-	GT_CTF,             // capture the flag
-
+	GT_NONE,            // no game mode
+	GT_SINGLE_PLAYER,   // single player (must be 1 for save compatibility)
+	GT_GOTHIC,          // castle gothicstein
+	GT_SURVIVAL,        // survival
 	GT_MAX_GAME_TYPE
 } gametype_t;
 
@@ -774,10 +769,6 @@ int BotGetLevelItemGoal( int index, char *name, bot_goal_t *goal ) {
 			if ( li->notsingle ) {
 				continue;
 			}
-		} else if ( g_gametype >= GT_TEAM )     {
-			if ( li->notteam ) {
-				continue;
-			}
 		} else {
 			if ( li->notfree ) {
 				continue;
@@ -1158,10 +1149,6 @@ int BotChooseLTGItem( int goalstate, vec3_t origin, int *inventory, int travelfl
 			if ( li->notsingle ) {
 				continue;
 			}
-		} else if ( g_gametype >= GT_TEAM )     {
-			if ( li->notteam ) {
-				continue;
-			}
 		} else {
 			if ( li->notfree ) {
 				continue;
@@ -1319,10 +1306,6 @@ int BotChooseNBGItem( int goalstate, vec3_t origin, int *inventory, int travelfl
 	{
 		if ( g_gametype == GT_SINGLE_PLAYER ) {
 			if ( li->notsingle ) {
-				continue;
-			}
-		} else if ( g_gametype >= GT_TEAM )     {
-			if ( li->notteam ) {
 				continue;
 			}
 		} else {
