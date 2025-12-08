@@ -1749,6 +1749,105 @@ static qboolean ParseShader( char **text ) {
 		else if ( !Q_stricmp( token, "sort" ) ) {
 			ParseSort( text );
 			continue;
+		}
+		// implicitMap - implicit diffuse map
+		else if ( !Q_stricmp( token, "implicitMap" ) ) {
+			image_t *image;
+			token = COM_ParseExt( text, qfalse );
+			if ( token[0] == '-' || token[0] == '\0' ) {
+				image = R_FindImageFile( shader.name, IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP | IMGFLAG_PICMIP );
+			} else {
+				image = R_FindImageFile( token, IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP | IMGFLAG_PICMIP );
+			}
+			if ( !image ) {
+				image = tr.defaultImage;
+			}
+			if ( shader.lightmapIndex >= 0 ) {
+				stages[s].bundle[0].image[0] = tr.lightmaps[shader.lightmapIndex];
+				stages[s].bundle[0].isLightmap = qtrue;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_IDENTITY;
+				stages[s].stateBits = GLS_DEFAULT;
+				s++;
+				stages[s].bundle[0].image[0] = image;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_IDENTITY;
+				stages[s].stateBits = GLS_DSTBLEND_ZERO | GLS_SRCBLEND_DST_COLOR;
+				s++;
+			} else {
+				stages[s].bundle[0].image[0] = image;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_LIGHTING_DIFFUSE;
+				stages[s].stateBits = GLS_DEFAULT;
+				s++;
+			}
+			continue;
+		}
+		// implicitMask - implicit diffuse map with alpha testing
+		else if ( !Q_stricmp( token, "implicitMask" ) ) {
+			image_t *image;
+			token = COM_ParseExt( text, qfalse );
+			if ( token[0] == '-' || token[0] == '\0' ) {
+				image = R_FindImageFile( shader.name, IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP | IMGFLAG_PICMIP );
+			} else {
+				image = R_FindImageFile( token, IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP | IMGFLAG_PICMIP );
+			}
+			if ( !image ) {
+				image = tr.defaultImage;
+			}
+			if ( shader.lightmapIndex >= 0 ) {
+				stages[s].bundle[0].image[0] = tr.lightmaps[shader.lightmapIndex];
+				stages[s].bundle[0].isLightmap = qtrue;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_IDENTITY;
+				stages[s].stateBits = GLS_DEFAULT;
+				s++;
+				stages[s].bundle[0].image[0] = image;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_IDENTITY;
+				stages[s].stateBits = GLS_DSTBLEND_ZERO | GLS_SRCBLEND_DST_COLOR | GLS_ATEST_GE_80;
+				s++;
+			} else {
+				stages[s].bundle[0].image[0] = image;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_LIGHTING_DIFFUSE;
+				stages[s].stateBits = GLS_DEFAULT | GLS_ATEST_GE_80;
+				s++;
+			}
+			continue;
+		}
+		// implicitBlend - implicit diffuse map with alpha blending
+		else if ( !Q_stricmp( token, "implicitBlend" ) ) {
+			image_t *image;
+			token = COM_ParseExt( text, qfalse );
+			if ( token[0] == '-' || token[0] == '\0' ) {
+				image = R_FindImageFile( shader.name, IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP | IMGFLAG_PICMIP );
+			} else {
+				image = R_FindImageFile( token, IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP | IMGFLAG_PICMIP );
+			}
+			if ( !image ) {
+				image = tr.defaultImage;
+			}
+			if ( shader.lightmapIndex >= 0 ) {
+				stages[s].bundle[0].image[0] = tr.lightmaps[shader.lightmapIndex];
+				stages[s].bundle[0].isLightmap = qtrue;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_IDENTITY;
+				stages[s].stateBits = GLS_DEFAULT;
+				s++;
+				stages[s].bundle[0].image[0] = image;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_IDENTITY;
+				stages[s].stateBits = GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA;
+				s++;
+			} else {
+				stages[s].bundle[0].image[0] = image;
+				stages[s].active = qtrue;
+				stages[s].rgbGen = CGEN_LIGHTING_DIFFUSE;
+				stages[s].stateBits = GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA;
+				s++;
+			}
+			continue;
 		} else
 		{
 			ri.Printf( PRINT_WARNING, "WARNING: unknown general shader parameter '%s' in '%s'\n", token, shader.name );

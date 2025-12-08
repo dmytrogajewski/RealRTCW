@@ -918,6 +918,7 @@ void AICast_ScriptParse( cast_state_t *cs ) {
 			}
 
 			// parse the actions for this event
+			int skipLevel = 0;  // Track nested #if blocks to skip
 			while ( ( token = COM_Parse( &pScript ) ) && ( token[0] != '}' ) )
 			{
 				if ( !token[0] ) {
@@ -926,6 +927,58 @@ void AICast_ScriptParse( cast_state_t *cs ) {
 					        ent->aiName ? ent->aiName : "unknown", eventNameBuf );
 					// Break out of action parsing, skip this event
 					break;
+				}
+
+				// Handle #if cvar == value conditional directive
+				if ( !Q_stricmp( token, "#if" ) ) {
+					char *cvarName, *op, *valueStr;
+					int cvarValue, testValue;
+					qboolean conditionMet = qfalse;
+
+					cvarName = COM_ParseExt( &pScript, qfalse );
+					op = COM_ParseExt( &pScript, qfalse );
+					valueStr = COM_ParseExt( &pScript, qfalse );
+
+					if ( cvarName[0] && op[0] && valueStr[0] ) {
+						cvarValue = trap_Cvar_VariableIntegerValue( cvarName );
+						testValue = atoi( valueStr );
+
+						if ( !Q_stricmp( op, "==" ) ) {
+							conditionMet = ( cvarValue == testValue );
+						} else if ( !Q_stricmp( op, "!=" ) ) {
+							conditionMet = ( cvarValue != testValue );
+						} else if ( !Q_stricmp( op, ">" ) ) {
+							conditionMet = ( cvarValue > testValue );
+						} else if ( !Q_stricmp( op, "<" ) ) {
+							conditionMet = ( cvarValue < testValue );
+						} else if ( !Q_stricmp( op, ">=" ) ) {
+							conditionMet = ( cvarValue >= testValue );
+						} else if ( !Q_stricmp( op, "<=" ) ) {
+							conditionMet = ( cvarValue <= testValue );
+						}
+					}
+
+					if ( !conditionMet ) {
+						skipLevel++;
+					}
+					continue;
+				}
+
+				// Handle #endif directive
+				if ( !Q_stricmp( token, "#endif" ) ) {
+					if ( skipLevel > 0 ) {
+						skipLevel--;
+					}
+					continue;
+				}
+
+				// If we're inside a false #if block, skip all actions until #endif
+				if ( skipLevel > 0 ) {
+					// Still need to consume the rest of the line (parameters)
+					while ( ( token = COM_ParseExt( &pScript, qfalse ) ) && token[0] ) {
+						// consume parameters
+					}
+					continue;
 				}
 
 				// Store action name for better error messages
