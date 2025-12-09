@@ -2984,6 +2984,66 @@ ifneq ($(BUILD_GAME_SO),0)
   endif
 endif
 
+# Install to Steam Flatpak RealRTCW directory (Linux)
+# Copies original RTCW assets and RealRTCW content to lowercase 'main' directory
+STEAM_RTCW_DIR := $(HOME)/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/Return to Castle Wolfenstein
+STEAM_REALRTCW_DIR := $(HOME)/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/RealRTCW
+
+install-steam: release
+	@echo "Installing RealRTCW to Steam Flatpak directory..."
+	@# Create target directories
+	@mkdir -p "$(STEAM_REALRTCW_DIR)/main"
+	@mkdir -p "$(STEAM_REALRTCW_DIR)/main/models"
+	@# Copy original RTCW assets (required to run)
+	@echo "Copying original RTCW assets..."
+	@cp "$(STEAM_RTCW_DIR)/main/pak0.pk3" "$(STEAM_REALRTCW_DIR)/main/" 2>/dev/null || echo "Warning: pak0.pk3 not found"
+	@cp "$(STEAM_RTCW_DIR)/main/sp_pak1.pk3" "$(STEAM_REALRTCW_DIR)/main/" 2>/dev/null || echo "Warning: sp_pak1.pk3 not found"
+	@cp "$(STEAM_RTCW_DIR)/main/sp_pak2.pk3" "$(STEAM_REALRTCW_DIR)/main/" 2>/dev/null || echo "Warning: sp_pak2.pk3 not found"
+	@cp "$(STEAM_RTCW_DIR)/main/sp_pak3.pk3" "$(STEAM_REALRTCW_DIR)/main/" 2>/dev/null || echo "Warning: sp_pak3.pk3 not found"
+	@cp "$(STEAM_RTCW_DIR)/main/sp_pak4.pk3" "$(STEAM_REALRTCW_DIR)/main/" 2>/dev/null || echo "Warning: sp_pak4.pk3 not found"
+	@# Copy RealRTCW content from Main to main (Linux uses lowercase)
+	@echo "Copying RealRTCW content..."
+	@cp -r Main/*.pk3 "$(STEAM_REALRTCW_DIR)/main/" 2>/dev/null || true
+	@cp -r Main/*.cfg "$(STEAM_REALRTCW_DIR)/main/" 2>/dev/null || true
+	@# Copy LLM models if present
+	@if [ -d "Main/models" ]; then \
+		echo "Copying LLM models..."; \
+		cp -r Main/models/* "$(STEAM_REALRTCW_DIR)/main/models/" 2>/dev/null || true; \
+	fi
+	@# Copy TTS (Piper) files if present
+	@if [ -d "Main/tts" ]; then \
+		echo "Copying TTS files..."; \
+		cp -r Main/tts "$(STEAM_REALRTCW_DIR)/main/" 2>/dev/null || true; \
+	fi
+	@# Create GLSL shaders pk3 if GLSL directory exists
+	@if [ -d "Main/glsl" ]; then \
+		echo "Creating GLSL shaders pk3..."; \
+		rm -rf /tmp/rtcw_shaders_pk3; \
+		mkdir -p /tmp/rtcw_shaders_pk3/glsl; \
+		cp -r Main/glsl/* /tmp/rtcw_shaders_pk3/glsl/; \
+		(cd /tmp/rtcw_shaders_pk3 && zip -r glsl_shaders.pk3 glsl); \
+		cp /tmp/rtcw_shaders_pk3/glsl_shaders.pk3 "$(STEAM_REALRTCW_DIR)/main/"; \
+		rm -rf /tmp/rtcw_shaders_pk3; \
+	fi
+	@# Install game modules
+	@echo "Installing game modules..."
+	@$(INSTALL) $(STRIP_FLAG) -m 0755 $(BR)/$(BASEGAME)/cgame.sp.$(SHLIBNAME) "$(STEAM_REALRTCW_DIR)/main/"
+	@$(INSTALL) $(STRIP_FLAG) -m 0755 $(BR)/$(BASEGAME)/qagame.sp.$(SHLIBNAME) "$(STEAM_REALRTCW_DIR)/main/"
+	@$(INSTALL) $(STRIP_FLAG) -m 0755 $(BR)/$(BASEGAME)/ui.sp.$(SHLIBNAME) "$(STEAM_REALRTCW_DIR)/main/"
+	@# Install main executable
+	@echo "Installing executable..."
+	@$(INSTALL) $(STRIP_FLAG) -m 0755 $(BR)/$(CLIENTBIN)$(FULLBINEXT) "$(STEAM_REALRTCW_DIR)/"
+	@# Create config with working rendering settings
+	@echo "Creating enhanced config..."
+	@echo '// RealRTCW Enhanced Rendering Settings' > "$(STEAM_REALRTCW_DIR)/main/realrtcw_enhanced.cfg"
+	@echo 'seta r_glsl "1"' >> "$(STEAM_REALRTCW_DIR)/main/realrtcw_enhanced.cfg"
+	@echo 'seta r_ssao "1"' >> "$(STEAM_REALRTCW_DIR)/main/realrtcw_enhanced.cfg"
+	@echo 'seta r_hdr "0"' >> "$(STEAM_REALRTCW_DIR)/main/realrtcw_enhanced.cfg"
+	@echo ""
+	@echo "Installation complete!"
+	@echo "Run the game with: cd \"$(STEAM_REALRTCW_DIR)\" && ./start_native.sh"
+	@echo "Or execute: exec realrtcw_enhanced in the console for optimal settings"
+
 clean: clean-debug clean-release
 
 clean-debug:

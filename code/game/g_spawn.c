@@ -1024,8 +1024,9 @@ qboolean G_LoadEntsFile( void ) {
 		}
 	}
 
-	level.extraEntsScript = G_Alloc( len );
+	level.extraEntsScript = G_Alloc( len + 1 );
 	trap_FS_Read( level.extraEntsScript, len, f );
+	level.extraEntsScript[len] = '\0';
 
 	trap_FS_FCloseFile( f );
 
@@ -1044,7 +1045,13 @@ qboolean G_ParseExtraSpawnVars( void ) {
 	level.numSpawnVars = 0;
 	level.numSpawnVarChars = 0;
 
+	if ( !level.extraEntsScript ) {
+		return qfalse;
+	}
+
 	data = level.extraEntsScript;
+
+	COM_BeginParseSession( "G_ParseExtraSpawnVars" );
 
 	// parse the opening brace
 	com_token = COM_Parse( &data );
@@ -1064,7 +1071,7 @@ qboolean G_ParseExtraSpawnVars( void ) {
 		// parse key
 		keyname = COM_Parse( &data );
 		if ( !keyname[0] ) {
-			return qfalse;
+			break;
 		}
 
 		if ( keyname[0] == '}' ) {
@@ -1083,11 +1090,15 @@ qboolean G_ParseExtraSpawnVars( void ) {
 		// parse value
 		com_token = COM_Parse( &data );
 		if ( !com_token[0] ) {
-			G_Error( "G_ParseExtraSpawnVars: EOF without closing brace" );
+			G_Printf( "^3WARNING: G_ParseExtraSpawnVars(), Error (line %d): '}' expected, end of extra ents found. Skipping remaining entries.\n",
+						COM_GetCurrentParseLine() );
+			break;
 		}
 
 		if ( com_token[0] == '}' ) {
-			G_Error( "G_ParseExtraSpawnVars: closing brace without data" );
+			G_Printf( "^3WARNING: G_ParseExtraSpawnVars(), Error (line %d): closing brace without data for key '%s'. Skipping remaining entries.\n",
+						COM_GetCurrentParseLine(), _keyname );
+			break;
 		}
 
 		strcpy( _com_token, com_token );

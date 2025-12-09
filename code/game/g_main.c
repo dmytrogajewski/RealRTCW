@@ -389,11 +389,11 @@ cvarTable_t gameCvarTable[] = {
 	{&g_mapname, "mapname", "", CVAR_ARCHIVE},
 	
 	// LLM Integration
-	{&ai_llm_enabled, "ai_llm_enabled", "0", CVAR_ARCHIVE, 0, qfalse},
+	{&ai_llm_enabled, "ai_llm_enabled", "1", CVAR_ARCHIVE, 0, qfalse},
 	{&ai_llm_strategic_interval, "ai_llm_strategic_interval", "3", CVAR_ARCHIVE, 0, qfalse},
 	{&ai_llm_dialogue_interval, "ai_llm_dialogue_interval", "5", CVAR_ARCHIVE, 0, qfalse},
 	{&ai_llm_max_threads, "ai_llm_max_threads", "4", CVAR_ARCHIVE, 0, qfalse},
-	{&ai_llm_debug, "ai_llm_debug", "0", CVAR_ARCHIVE, 0, qfalse},
+	{&ai_llm_debug, "ai_llm_debug", "1", CVAR_ARCHIVE, 0, qfalse},
 	{&ai_llm_model_path, "ai_llm_model_path", "main/models/qwen3-4b.gguf", CVAR_ARCHIVE, 0, qfalse},
 	{&ai_llm_gpu_layers, "ai_llm_gpu_layers", "37", CVAR_ARCHIVE, 0, qfalse},
 	

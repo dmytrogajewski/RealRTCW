@@ -294,8 +294,9 @@ void G_Script_ScriptLoad( void ) {
 		return;
 	}
 
-	level.scriptEntity = G_Alloc( len );
+	level.scriptEntity = G_Alloc( len + 1 );
 	trap_FS_Read( level.scriptEntity, len, f );
+	level.scriptEntity[len] = '\0';
 
 	trap_FS_FCloseFile( f );
 }
@@ -443,6 +444,13 @@ void G_Script_ScriptParse( gentity_t *ent ) {
 
 				action = G_Script_ActionForString( token );
 				if ( !action ) {
+				// Gracefully skip unknown preprocessor-style directives instead of crashing
+				if ( token[0] == '#' ) {
+					G_Printf( "^3WARNING: G_Script_ScriptParse(), Error (line %d): ignoring preprocessor directive '%s'.\n",
+					        COM_GetCurrentParseLine(), token );
+					SkipRestOfLine( &pScript );
+					continue;
+				}
 					G_Error( "G_Script_ScriptParse(), Error (line %d): unknown action: %s.\n", COM_GetCurrentParseLine(), token );
 				}
 

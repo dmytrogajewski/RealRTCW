@@ -776,6 +776,9 @@ void idCameraDef::buildCamera() {
 }
 
 void idCameraDef::startCamera( long t ) {
+	if ( !cameraPosition ) {
+		return;
+	}
 	cameraPosition->clearVelocities();
 	cameraPosition->start( t );
 	buildCamera();
