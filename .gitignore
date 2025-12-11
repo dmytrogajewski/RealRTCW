@@ -3,6 +3,8 @@ Makefile.local
 *.swp
 *tags
 *~
+.zig-cache
+zig-out
 
 # OS X
 ####################

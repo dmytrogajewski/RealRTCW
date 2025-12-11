@@ -766,7 +766,8 @@ void *VM_ArgPtr( intptr_t intValue ) {
 	  return NULL;
 
 	if ( currentVM->entryPoint ) {
-		return (void *)(currentVM->dataBase + intValue);
+		// Native DLL mode - intValue is already a real pointer
+		return (void *)intValue;
 	}
 	else {
 		return (void *)(currentVM->dataBase + (intValue & currentVM->dataMask));
@@ -782,9 +783,9 @@ void *VM_ExplicitArgPtr( vm_t *vm, intptr_t intValue ) {
 	if ( currentVM==NULL )
 	  return NULL;
 
-	//
 	if ( vm->entryPoint ) {
-		return (void *)(vm->dataBase + intValue);
+		// Native DLL mode - intValue is already a real pointer
+		return (void *)intValue;
 	}
 	else {
 		return (void *)(vm->dataBase + (intValue & vm->dataMask));
