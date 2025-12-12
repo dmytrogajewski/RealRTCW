@@ -406,6 +406,13 @@ void FBO_Init(void)
 		R_CheckFBO(tr.screenSsaoFbo);
 	}
 
+	if (tr.screenSsgiImage)
+	{
+		tr.screenSsgiFbo = FBO_Create("_screenssgi", tr.screenSsgiImage->width, tr.screenSsgiImage->height);
+		FBO_AttachImage(tr.screenSsgiFbo, tr.screenSsgiImage, GL_COLOR_ATTACHMENT0, 0);
+		R_CheckFBO(tr.screenSsgiFbo);
+	}
+
 	if (tr.renderCubeImage)
 	{
 		tr.renderCubeFbo = FBO_Create("_renderCubeFbo", tr.renderCubeImage->width, tr.renderCubeImage->height);

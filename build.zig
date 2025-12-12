@@ -190,6 +190,7 @@ pub fn build(b: *std.Build) void {
             "shadowfill_fp",   "shadowfill_vp",
             "shadowmask_fp",   "shadowmask_vp",
             "ssao_fp",         "ssao_vp",
+            "ssgi_fp",         "ssgi_vp",
             "texturecolor_fp", "texturecolor_vp",
             "tonemap_fp",      "tonemap_vp",
         };

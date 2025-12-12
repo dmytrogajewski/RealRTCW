@@ -48,6 +48,8 @@ extern const char *fallbackShader_shadowmask_vp;
 extern const char *fallbackShader_shadowmask_fp;
 extern const char *fallbackShader_ssao_vp;
 extern const char *fallbackShader_ssao_fp;
+extern const char *fallbackShader_ssgi_vp;
+extern const char *fallbackShader_ssgi_fp;
 extern const char *fallbackShader_texturecolor_vp;
 extern const char *fallbackShader_texturecolor_fp;
 extern const char *fallbackShader_tonemap_vp;
@@ -1419,6 +1421,24 @@ void GLSL_InitGPUShaders(void)
 	numEtcShaders++;
 
 
+	attribs = ATTR_POSITION | ATTR_TEXCOORD;
+	extradefines[0] = '\0';
+
+	if (!GLSL_InitGPUShader(&tr.ssgiShader, "ssgi", attribs, qtrue, extradefines, qtrue, fallbackShader_ssgi_vp, fallbackShader_ssgi_fp))
+	{
+		ri.Error(ERR_FATAL, "Could not load ssgi shader!");
+	}
+
+	GLSL_InitUniforms(&tr.ssgiShader);
+
+	GLSL_SetUniformInt(&tr.ssgiShader, UNIFORM_SCREENDEPTHMAP, TB_COLORMAP);
+	GLSL_SetUniformInt(&tr.ssgiShader, UNIFORM_SCREENIMAGEMAP, TB_LIGHTMAP);
+
+	GLSL_FinishGPUShader(&tr.ssgiShader);
+
+	numEtcShaders++;
+
+
 	for (i = 0; i < 4; i++)
 	{
 		attribs = ATTR_POSITION | ATTR_TEXCOORD;
@@ -1512,6 +1532,7 @@ void GLSL_ShutdownGPUShaders(void)
 
 	GLSL_DeleteGPUShader(&tr.shadowmaskShader);
 	GLSL_DeleteGPUShader(&tr.ssaoShader);
+	GLSL_DeleteGPUShader(&tr.ssgiShader);
 
 	for ( i = 0; i < 4; i++)
 		GLSL_DeleteGPUShader(&tr.depthBlurShader[i]);

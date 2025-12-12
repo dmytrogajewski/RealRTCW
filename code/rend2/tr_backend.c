@@ -2062,6 +2062,62 @@ const void *RB_PostProcess(const void *data)
 		FBO_Blit(tr.screenSsaoFbo, srcBox, NULL, srcFbo, dstBox, NULL, NULL, GLS_SRCBLEND_DST_COLOR | GLS_DSTBLEND_ZERO);
 	}
 
+	// SSGI - Screen Space Global Illumination
+	if (r_ssgi->integer && tr.screenSsgiImage)
+	{
+		vec4_t quadVerts[4];
+		vec2_t texCoords[4];
+		vec4_t viewInfo;
+
+		viewInfo[0] = backEnd.viewParms.zFar / backEnd.viewParms.zNear;
+		viewInfo[1] = backEnd.viewParms.zFar;
+		viewInfo[2] = 1.0f / (float)(tr.screenSsgiImage->width);
+		viewInfo[3] = 1.0f / (float)(tr.screenSsgiImage->height);
+
+		// Render SSGI to half-resolution buffer
+		FBO_Bind(tr.screenSsgiFbo);
+
+		qglViewport(0, 0, tr.screenSsgiFbo->width, tr.screenSsgiFbo->height);
+		qglScissor(0, 0, tr.screenSsgiFbo->width, tr.screenSsgiFbo->height);
+
+		VectorSet4(quadVerts[0], -1,  1, 0, 1);
+		VectorSet4(quadVerts[1],  1,  1, 0, 1);
+		VectorSet4(quadVerts[2],  1, -1, 0, 1);
+		VectorSet4(quadVerts[3], -1, -1, 0, 1);
+
+		texCoords[0][0] = 0; texCoords[0][1] = 1;
+		texCoords[1][0] = 1; texCoords[1][1] = 1;
+		texCoords[2][0] = 1; texCoords[2][1] = 0;
+		texCoords[3][0] = 0; texCoords[3][1] = 0;
+
+		GL_State(GLS_DEPTHTEST_DISABLE);
+
+		GLSL_BindProgram(&tr.ssgiShader);
+
+		// Bind depth and scene color
+		GL_BindToTMU(tr.hdrDepthImage, TB_COLORMAP);
+		if (srcFbo && srcFbo->colorImage[0])
+			GL_BindToTMU(srcFbo->colorImage[0], TB_LIGHTMAP);
+		else
+			GL_BindToTMU(tr.whiteImage, TB_LIGHTMAP);
+
+		GLSL_SetUniformVec4(&tr.ssgiShader, UNIFORM_VIEWINFO, viewInfo);
+
+		RB_InstantQuad2(quadVerts, texCoords);
+
+		// Apply SSGI additively to the scene
+		FBO_Bind(srcFbo);
+		SetViewportAndScissor();
+
+		srcBox[0] = backEnd.viewParms.viewportX      * tr.screenSsgiImage->width  / (float)glConfig.vidWidth;
+		srcBox[1] = backEnd.viewParms.viewportY      * tr.screenSsgiImage->height / (float)glConfig.vidHeight;
+		srcBox[2] = backEnd.viewParms.viewportWidth  * tr.screenSsgiImage->width  / (float)glConfig.vidWidth;
+		srcBox[3] = backEnd.viewParms.viewportHeight * tr.screenSsgiImage->height / (float)glConfig.vidHeight;
+
+		// Additive blend for indirect lighting
+		FBO_Blit(tr.screenSsgiFbo, srcBox, NULL, srcFbo, dstBox, NULL, NULL, GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE);
+	}
+
 	srcBox[0] = backEnd.viewParms.viewportX;
 	srcBox[1] = backEnd.viewParms.viewportY;
 	srcBox[2] = backEnd.viewParms.viewportWidth;
