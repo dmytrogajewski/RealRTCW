@@ -124,6 +124,27 @@ static std::atomic<bool> g_gamePaused(false);  // Set when game is pausing/resta
 // Configuration
 #define MAX_QUEUE_SIZE 16  // Allow more in-flight requests; still bounded
 
+// Thread-safe debug message queue
+static std::vector<std::string> g_debugMessages;
+static std::mutex g_debugMutex;
+
+// Helper to queue debug messages from worker thread (thread-safe)
+static void LLM_QueueDebugMessage(const char *fmt, ...) {
+	char buffer[1024];
+	va_list args;
+	va_start(args, fmt);
+	vsnprintf(buffer, sizeof(buffer), fmt, args);
+	va_end(args);
+	
+	std::lock_guard<std::mutex> lock(g_debugMutex);
+	g_debugMessages.push_back(std::string(buffer));
+	
+	// Limit queue size to prevent memory issues
+	if (g_debugMessages.size() > 100) {
+		g_debugMessages.erase(g_debugMessages.begin());
+	}
+}
+
 // Forward declarations
 static void LLM_WorkerThread();
 static std::string LLM_BuildStrategicPrompt(cast_state_t *cs);
@@ -345,7 +366,13 @@ qboolean LLM_IsReady(void) {
 }
 
 void LLM_RequestStrategicDecision(cast_state_t *cs) {
-	if (!g_llm.initialized || !cs || g_shutdownRequested || g_gamePaused) {
+	if (!g_llm.initialized) {
+		if (ai_llm_debug.integer >= 2) {
+			G_Printf("^3[LLM] RequestStrategicDecision: LLM not initialized\n");
+		}
+		return;
+	}
+	if (!cs || g_shutdownRequested || g_gamePaused) {
 		return;
 	}
 	
@@ -356,6 +383,11 @@ void LLM_RequestStrategicDecision(cast_state_t *cs) {
 	gentity_t *ent = &g_entities[cs->entityNum];
 	if (!ent->inuse) {
 		return;
+	}
+	
+	if (ai_llm_debug.integer >= 2) {
+		G_Printf("^2[LLM] Queuing STRATEGIC request for %s (entity %d)\n", 
+			ent->aiName ? ent->aiName : "unknown", cs->entityNum);
 	}
 	
 	llm_request_t request;
@@ -473,8 +505,27 @@ qboolean LLM_HasPendingDialogue(int entityNum) {
 
 void LLM_Update(void) {
 	// This is called from the game loop
-	// The actual processing happens in the worker thread
-	// No action needed here currently
+	// Print any queued debug messages from the worker thread
+	static int lastDebugTime = 0;
+	
+	std::lock_guard<std::mutex> lock(g_debugMutex);
+	
+	// Print queued messages
+	for (const auto &msg : g_debugMessages) {
+		G_Printf("%s", msg.c_str());
+	}
+	g_debugMessages.clear();
+	
+	// Periodic status update (every 10 seconds)
+	if (ai_llm_debug.integer >= 2 && level.time - lastDebugTime > 10000) {
+		lastDebugTime = level.time;
+		G_Printf("^5[LLM Status] initialized=%d, queue=%d, responses=%d, processing=%d, paused=%d\n",
+			g_llm.initialized ? 1 : 0,
+			(int)g_requestQueue.size(),
+			(int)g_responses.size(),
+			g_processingRequest ? 1 : 0,
+			g_gamePaused ? 1 : 0);
+	}
 }
 
 void LLM_ClearPendingRequests(int entityNum) {
@@ -1503,6 +1554,8 @@ static std::string LLM_Generate(const std::string &prompt, int maxTokens, qboole
 //
 
 static void LLM_WorkerThread() {
+	LLM_QueueDebugMessage("^2[LLM Worker] Thread started\n");
+	
 	while (!g_shutdownRequested) {
 		llm_request_t request;
 		
@@ -1533,6 +1586,9 @@ static void LLM_WorkerThread() {
 		// Mark as processing
 		g_processingRequest = true;
 		
+		const char *reqType = (request.type == REQUEST_STRATEGIC) ? "STRATEGIC" : "DIALOGUE";
+		LLM_QueueDebugMessage("^3[LLM Worker] Processing %s request for entity %d\n", reqType, request.entityNum);
+		
 		// Process request with error handling
 		std::string output;
 		try {
@@ -1543,15 +1599,13 @@ static void LLM_WorkerThread() {
 			}
 			
 			if (request.type == REQUEST_STRATEGIC) {
-				output = LLM_Generate(request.prompt, 2048, qtrue); // Increased to 512 to prevent truncation
+				output = LLM_Generate(request.prompt, 2048, qtrue);
 			} else if (request.type == REQUEST_DIALOGUE) {
-				// Dialogue needs enough tokens for complete JSON: {"dialogue": "...", "priority": N}
-				// Minimum ~30-40 tokens, use 100 to ensure completion even with longer German text
-				// Pass qtrue to requireCompleteJSON so generation continues until we get a closing brace
-				output = LLM_Generate(request.prompt, 2048, qtrue); // Increased to 512
+				output = LLM_Generate(request.prompt, 2048, qtrue);
 			}
 		} catch (...) {
 			// Catch any C++ exceptions to prevent crashes
+			LLM_QueueDebugMessage("^1[LLM Worker] Exception during generation!\n");
 			output = "";
 		}
 		
@@ -1559,6 +1613,9 @@ static void LLM_WorkerThread() {
 		
 		// Only store response if not shutting down or paused
 		if (!g_shutdownRequested && !g_gamePaused && output.length() > 0) {
+			LLM_QueueDebugMessage("^2[LLM Worker] Got response (%d chars): %.100s%s\n", 
+				(int)output.length(), output.c_str(), output.length() > 100 ? "..." : "");
+			
 			std::lock_guard<std::mutex> lock(g_responseMutex);
 			llm_response_t response;
 			response.type = request.type;

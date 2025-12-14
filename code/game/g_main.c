@@ -2837,6 +2837,11 @@ void G_RunFrame( int levelTime ) {
 	
 	// Update TTS system (process completed requests)
 	TTS_Update();
+	
+	// Update LLM system (print debug messages from worker thread)
+	if ( ai_llm_enabled.integer ) {
+		LLM_Update();
+	}
 
 	if ( g_listEntity.integer ) {
 		for ( i = 0; i < MAX_GENTITIES; i++ ) {

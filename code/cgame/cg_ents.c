@@ -1839,6 +1839,13 @@ static void CG_Explosive( centity_t *cent ) {
 	if ( s1->modelindex2 ) {
 		ent.skinNum = 0;
 		ent.hModel = cgs.gameModels[s1->modelindex2];
+		// ensure valid frame values
+		if ( ent.frame < 0 ) {
+			ent.frame = 0;
+		}
+		if ( ent.oldframe < 0 ) {
+			ent.oldframe = 0;
+		}
 		trap_R_AddRefEntityToScene( &ent );
 	} else {
 		trap_R_AddRefEntityToScene( &ent );
@@ -1908,6 +1915,13 @@ static void CG_Mover( centity_t *cent ) {
 		if ( ent.frame && ( cent->currentState.eFlags & EF_MOVER_ANIMATE ) ) {
 			ent.oldframe -= 1;
 			ent.backlerp = 1 - cg.frameInterpolation;
+		}
+		// ensure valid frame values
+		if ( ent.frame < 0 ) {
+			ent.frame = 0;
+		}
+		if ( ent.oldframe < 0 ) {
+			ent.oldframe = 0;
 		}
 		trap_R_AddRefEntityToScene( &ent );
 		memcpy( &cent->refEnt, &ent, sizeof( refEntity_t ) );
@@ -2129,6 +2143,15 @@ static void CG_Prop( centity_t *cent ) {
 		ent.skinNum = 0;
 		ent.hModel = cgs.gameModels[s1->modelindex2];
 		ent.frame = s1->frame;
+		ent.oldframe = ent.frame;
+		ent.backlerp = 0;
+		// ensure valid frame values
+		if ( ent.frame < 0 ) {
+			ent.frame = 0;
+		}
+		if ( ent.oldframe < 0 ) {
+			ent.oldframe = 0;
+		}
 		trap_R_AddRefEntityToScene( &ent );
 		memcpy( &cent->refEnt, &ent, sizeof( refEntity_t ) );
 	} else {
