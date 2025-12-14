@@ -192,8 +192,11 @@ static ignoreField_t gclientIgnoreFields[] = {
 static ignoreField_t castStateIgnoreFields[] = {
 	{CSFOFS( bs ),    sizeof( bot_state_t * )},
 	{CSFOFS( numCastScriptEvents ),   sizeof( int )},
+	{CSFOFS( scriptEventsExecuted ),  sizeof( int )},  // computed at runtime, not saved
 	{CSFOFS( castScriptEvents ), sizeof( cast_script_event_t * ) }, // gets created upon parsing the script file, this is static while playing
 	{CSFOFS( weaponInfo ),    sizeof( cast_weapon_info_t * )},
+	// Don't restore script execution state - scripts are re-parsed and event indices may change
+	{CSFOFS( castScriptStatus ), sizeof( cast_script_status_t )},
 
 	{0, 0}
 };

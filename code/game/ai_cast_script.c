@@ -1106,6 +1106,7 @@ void AICast_ScriptParse( cast_state_t *cs ) {
 		cs->castScriptEvents = G_Alloc( sizeof( cast_script_event_t ) * numEventItems );
 		memcpy( cs->castScriptEvents, cast_temp_events, sizeof( cast_script_event_t ) * numEventItems );
 		cs->numCastScriptEvents = numEventItems;
+		cs->scriptEventsExecuted = 0;  // no scripts executed yet
 
 		cs->castScriptStatus.castScriptEventIndex = -1;
 	}
@@ -1245,6 +1246,7 @@ AICast_ScriptRun
 qboolean AICast_ScriptRun( cast_state_t *cs, qboolean force ) {
 	cast_script_stack_t *stack;
 
+
 	if ( !aicast_scripts.integer ) {
 		return qtrue;
 	}
@@ -1303,6 +1305,11 @@ qboolean AICast_ScriptRun( cast_state_t *cs, qboolean force ) {
 		cs->castScriptStatus.scriptGotoId = -1;
 		cs->castScriptStatus.scriptGotoEnt = -1;
 		cs->castScriptStatus.scriptFlags |= SFL_FIRST_CALL;
+	}
+
+	// Mark this script event as executed (for squad system to know scripts have run)
+	if ( cs->castScriptStatus.castScriptEventIndex >= 0 && cs->castScriptStatus.castScriptEventIndex < 32 ) {
+		cs->scriptEventsExecuted |= ( 1 << cs->castScriptStatus.castScriptEventIndex );
 	}
 
 	cs->castScriptStatus.castScriptEventIndex = -1;

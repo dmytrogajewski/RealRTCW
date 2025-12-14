@@ -389,6 +389,7 @@ typedef struct cast_state_s
 
 	// scripting system
 	int numCastScriptEvents;
+	int scriptEventsExecuted;                   // bitmask of which script events have completed (for squad system)
 	cast_script_event_t     *castScriptEvents;  // contains a list of actions to perform for each event type
 	cast_script_status_t castScriptStatus;      // current status of scripting
 	cast_script_status_t castScriptStatusCurrent;       // scripting status to use for backups

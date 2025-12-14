@@ -115,14 +115,6 @@ void AICast_AssignSquads(void) {
 			continue;
 		}
 		
-		// Skip NPCs that are currently running a script - they should follow their scripts
-		// But allow NPCs that have scripts defined but aren't actively executing them
-		if (cs->castScriptStatus.castScriptEventIndex >= 0) {
-			cs->squadId = -1;
-			cs->squadRole = SQUAD_ROLE_NONE;
-			continue;
-		}
-		
 		// Skip entities without valid team or with team >= 4
 		if (ent->aiTeam < 0 || ent->aiTeam >= 4) {
 			cs->squadId = -1;
@@ -130,6 +122,35 @@ void AICast_AssignSquads(void) {
 				G_Printf("Skipping entity %d with invalid aiTeam: %d\n", cs->entityNum, ent->aiTeam);
 			}
 			continue;
+		}
+		
+		// 1. Skip ALL friendly NPCs - they have important scripted behaviors
+		//    (opening doors, leading player, dialogue, etc.)
+		#define AITEAM_ALLIES 1
+		if (ent->aiTeam == AITEAM_ALLIES) {
+			cs->squadId = -1;
+			cs->squadRole = SQUAD_ROLE_NONE;
+			continue;
+		}
+		
+		// 2. For enemy NPCs: only add to squads after ALL scripts have executed
+		//    - Skip if a script is currently running
+		//    - Skip if not all scripts have been executed yet
+		if (cs->castScriptStatus.castScriptEventIndex >= 0) {
+			// Script currently running - don't add to squad
+			cs->squadId = -1;
+			cs->squadRole = SQUAD_ROLE_NONE;
+			continue;
+		}
+		if (cs->numCastScriptEvents > 0) {
+			// Calculate bitmask for all scripts (e.g., 3 scripts = 0b111 = 7)
+			int allScriptsMask = (cs->numCastScriptEvents < 32) ? ((1 << cs->numCastScriptEvents) - 1) : 0x7FFFFFFF;
+			if ((cs->scriptEventsExecuted & allScriptsMask) != allScriptsMask) {
+				// Not all scripts have executed yet - wait
+				cs->squadId = -1;
+				cs->squadRole = SQUAD_ROLE_NONE;
+				continue;
+			}
 		}
 		
 		processedCount++;
@@ -383,8 +404,17 @@ Called from main think loop for squad leaders
 void AICast_SquadLeaderThink(cast_state_t *cs) {
 	squad_t *squad;
 	llm_decision_t decision;
+	gentity_t *ent;
 	
 	if (!cs || cs->squadRole != SQUAD_ROLE_LEADER) {
+		return;
+	}
+	
+	ent = &g_entities[cs->entityNum];
+	
+	// Never run squad behavior for friendly NPCs
+	#define AITEAM_ALLIES_LEADER 1
+	if (ent->aiTeam == AITEAM_ALLIES_LEADER) {
 		return;
 	}
 	
@@ -456,6 +486,14 @@ void AICast_SquadMemberExecute(cast_state_t *cs) {
 		return;
 	}
 	
+	ent = &g_entities[cs->entityNum];
+	
+	// Never run squad behavior for friendly NPCs
+	#define AITEAM_ALLIES_MEMBER 1
+	if (ent->aiTeam == AITEAM_ALLIES_MEMBER) {
+		return;
+	}
+	
 	// Skip NPCs currently running a script - let the script control behavior
 	if (cs->castScriptStatus.castScriptEventIndex >= 0) {
 		return;
@@ -466,7 +504,6 @@ void AICast_SquadMemberExecute(cast_state_t *cs) {
 		return;
 	}
 	
-	ent = &g_entities[cs->entityNum];
 	leaderEnt = &g_entities[cs->squadLeaderNum];
 	
 	if (!leaderEnt->inuse) {

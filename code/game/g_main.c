@@ -1216,7 +1216,25 @@ void G_UpdateCvars( void ) {
 						// script should run, and the camera start.
 
 						saveGamePending = qtrue;    // set this temporarily so we dont actually run the script just yet
+						
+						// Trigger playerstart for the player
 						AICast_ScriptEvent( AICast_GetCastState( player->s.number ), "playerstart", "" );
+						
+						// Also trigger playerstart for all NPCs (like Kessler who opens doors)
+						{
+							int npc;
+							gentity_t *npcEnt;
+							for ( npc = 1; npc < level.maxclients; npc++ ) {
+								npcEnt = &g_entities[npc];
+								if ( !npcEnt->inuse || !(npcEnt->r.svFlags & SVF_CASTAI) ) {
+									continue;
+								}
+								if ( npcEnt->health > 0 ) {
+									AICast_ScriptEvent( AICast_GetCastState( npc ), "playerstart", "" );
+								}
+							}
+						}
+						
 						saveGamePending = qfalse;   // set it back
 
 						// save the "autosave\\<mapname>" savegame, which is taken before any cameras have been played

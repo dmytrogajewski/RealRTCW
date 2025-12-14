@@ -778,15 +778,23 @@ void AICast_CheckLoadGame( void ) {
 		if ( numSpawningCast != numcast ) {
 			// Log mismatch once for debugging
 			if ( !spawnMismatchLogged ) {
-				G_Printf( "^3WARNING: AI spawn count mismatch: numSpawningCast=%d, numcast=%d\n", numSpawningCast, numcast );
+				G_Printf( "^3WARNING: AI spawn count mismatch (savegame): numSpawningCast=%d, numcast=%d\n", numSpawningCast, numcast );
 				spawnMismatchLogged = qtrue;
 			}
-			// Allow timeout after 2 seconds to prevent permanent hang
-			if ( level.time - spawnWaitStartTime > 2000 ) {
-				G_Printf( "^1ERROR: AI spawn timeout after 2s. Proceeding anyway. numSpawningCast=%d, numcast=%d\n", numSpawningCast, numcast );
-			} else {
-				ready = qfalse;
+			// For savegame loading, give a longer timeout (10s) then show error
+			// We can't proceed with mismatch because savegame expects all clients connected
+			if ( level.time - spawnWaitStartTime > 10000 ) {
+				G_Printf( "^1ERROR: Savegame load failed - AI spawn timeout after 10s. numSpawningCast=%d, numcast=%d\n", numSpawningCast, numcast );
+				G_Printf( "^1       This savegame may be incompatible or corrupted.\n" );
+				trap_Cvar_Set( "savegame_loading", "0" );
+				saveGamePending = qfalse;
+				spawnWaitStartTime = 0;
+				spawnMismatchLogged = qfalse;
+				// Return to menu instead of hanging
+				trap_SendConsoleCommand( EXEC_APPEND, "disconnect\n" );
+				return;
 			}
+			ready = qfalse;
 		}
 		
 		if ( ready && !ent ) {
@@ -822,6 +830,20 @@ void AICast_CheckLoadGame( void ) {
 			trap_SendServerCommand( -1, va( "snd_fade 1 %d", 2000 ) );  //----(SA)	added
 
 			AICast_CastScriptThink();
+			
+			// Trigger playerstart for all NPCs after savegame load
+			// Script state is not restored from savegame, so playerstart can trigger important behaviors
+			{
+				int npc;
+				gentity_t *npcEnt;
+				for ( npc = 1; npc < level.maxclients; npc++ ) {
+					npcEnt = &g_entities[npc];
+					if ( !npcEnt->inuse || !(npcEnt->r.svFlags & SVF_CASTAI) || npcEnt->health <= 0 ) {
+						continue;
+					}
+					AICast_ScriptEvent( AICast_GetCastState( npc ), "playerstart", "" );
+				}
+			}
 		}
 	} else {
 
