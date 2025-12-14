@@ -47,3 +47,5 @@ profile
 .vscode/
 /.vs
 main/models/*.gguf
+main/models/*.gguf
+main/tts/*.onnx
