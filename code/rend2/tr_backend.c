@@ -59,10 +59,6 @@ void GL_BindToTMU( image_t *image, int tmu )
 		image->frameUsed = tr.frameCount;
 		texture = image->texnum;
 	}
-	else
-	{
-		ri.Printf(PRINT_WARNING, "GL_BindToTMU: NULL image\n");
-	}
 
 	GL_BindMultiTexture(GL_TEXTURE0 + tmu, target, texture);
 }

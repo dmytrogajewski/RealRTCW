@@ -3246,9 +3246,9 @@ void FS_AddGameDirectory( const char *path, const char *dir ) {
 			sorted[i] = pakfiles[i];
 
 			// JPW NERVE sp_* to _p_* so "sp_pak*" gets alphabetically sorted before "pak*"
-			//----(SA)	SP mod
-			// (SA) sort order to be further clarified later (10/8/01)
-			if ( !Q_strncmp( sorted[i],"sp_",3 ) ) { //	sort sp first
+			// Note: This was originally intended to give sp_pak higher priority than pak0,
+			// but mod files (z_*) should still override sp_pak for UI/HUD/etc.
+			if ( !Q_stricmpn( sorted[i],"sp_",3 ) ) {
 				memcpy( sorted[i],"zz",2 );
 			}
 		}
@@ -3259,7 +3259,6 @@ void FS_AddGameDirectory( const char *path, const char *dir ) {
 	for ( i = 0 ; i < numfiles ; i++ ) {
 		if ( Q_strncmp( sorted[i],"mp_",3 ) ) { // (SA) SP mod -- exclude mp_*
 			// JPW NERVE KLUDGE: fix filenames broken in mp/sp/pak sort above
-			//----(SA)	mod for SP
 			if ( !Q_strncmp( sorted[i],"zz_",3 ) ) {
 				memcpy( sorted[i],"sp",2 );
 			}
@@ -3805,24 +3804,32 @@ static void FS_CheckSPPaks( void )
 
 	if(!com_standalone->integer && (foundPak & 0xf) != 0xf)
 	{
-		char errorText[MAX_STRING_CHARS] = "";
-		char missingPaks[MAX_STRING_CHARS] = "";
-		int i = 0;
+		// Check if we have loose files instead of pk3 (development mode)
+		fileHandle_t f;
+		int len = FS_FOpenFileRead("scripts/common.shader", &f, qfalse);
+		if (len > 0) {
+			FS_FCloseFile(f);
+			// Loose files exist, skip sp_pak check
+		} else {
+			char errorText[MAX_STRING_CHARS] = "";
+			char missingPaks[MAX_STRING_CHARS] = "";
+			int i = 0;
 
-		if((foundPak & 0xf) != 0xf)
-		{
-			for( i = 0; i < NUM_SP_PAKS; i++ ) {
-				if ( !( foundPak & ( 1 << i ) ) ) {
-					Q_strcat( missingPaks, sizeof( missingPaks ), va( "sp_pak%d.pk3 ", i + 1 ) );
+			if((foundPak & 0xf) != 0xf)
+			{
+				for( i = 0; i < NUM_SP_PAKS; i++ ) {
+					if ( !( foundPak & ( 1 << i ) ) ) {
+						Q_strcat( missingPaks, sizeof( missingPaks ), va( "sp_pak%d.pk3 ", i + 1 ) );
+					}
 				}
+
+				Q_strcat( errorText, sizeof( errorText ),
+					va( "\n\nPoint Release files are missing: %s \n"
+					"Please re-install the 1.41 point release.\n\n", missingPaks ) );
 			}
 
-			Q_strcat( errorText, sizeof( errorText ),
-				va( "\n\nPoint Release files are missing: %s \n"
-				"Please re-install the 1.41 point release.\n\n", missingPaks ) );
+			Com_Error(ERR_FATAL, "%s", errorText);
 		}
-
-		Com_Error(ERR_FATAL, "%s", errorText);
 	}
 }
 
@@ -3949,21 +3956,30 @@ static void FS_CheckPak0( void )
 
 	if(!com_standalone->integer && (foundPak & 0x01) != 0x01)
 	{
-		char errorText[MAX_STRING_CHARS] = "";
+		// Check if we have loose files instead of pk3 (development mode)
+		// If essential loose files exist, allow running without pak0.pk3
+		fileHandle_t f;
+		int len = FS_FOpenFileRead("scripts/common.shader", &f, qfalse);
+		if (len > 0) {
+			FS_FCloseFile(f);
+			Com_Printf("Running with loose files (no pak0.pk3 required)\n");
+		} else {
+			char errorText[MAX_STRING_CHARS] = "";
 
-		if((foundPak & 0x01) != 0x01)
-		{
+			if((foundPak & 0x01) != 0x01)
+			{
+				Q_strcat(errorText, sizeof(errorText),
+					"\n\n\"pak0.pk3\" is missing. Please copy it\n"
+					"from your legitimate RTCW CDROM.\n\n");
+			}
+
 			Q_strcat(errorText, sizeof(errorText),
-				"\n\n\"pak0.pk3\" is missing. Please copy it\n"
-				"from your legitimate RTCW CDROM.\n\n");
+				va("Also check that your iortcw executable is in\n"
+					"the correct place and that every file\n"
+					"in the \"%s\" directory is present and readable.\n\n", BASEGAME));
+
+			Com_Error(ERR_FATAL, "%s", errorText);
 		}
-
-		Q_strcat(errorText, sizeof(errorText),
-			va("Also check that your iortcw executable is in\n"
-				"the correct place and that every file\n"
-				"in the \"%s\" directory is present and readable.\n\n", BASEGAME));
-
-		Com_Error(ERR_FATAL, "%s", errorText);
 	}
 
 	if(!founddemo)

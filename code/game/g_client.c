@@ -220,13 +220,18 @@ gentity_t *SelectRandomDeathmatchSpawnPoint( void ) {
     int count;
     int selection;
     gentity_t   *spots[MAX_SPAWN_POINTS];
+    int totalPlayerStart = 0;
+    int totalDeathmatch = 0;
+    int telefragCount = 0;
 
     count = 0;
     spot = NULL;
 
     // Search for info_player_start spawn points.
     while ( ( spot = G_Find( spot, FOFS( classname ), "info_player_start" ) ) != NULL ) {
+        totalPlayerStart++;
         if ( SpotWouldTelefrag( spot ) ) {
+            telefragCount++;
             continue;
         }
         spots[ count ] = spot;
@@ -239,7 +244,9 @@ gentity_t *SelectRandomDeathmatchSpawnPoint( void ) {
     spot = NULL;
     // Also search for info_player_deathmatch spawn points.
     while ( ( spot = G_Find( spot, FOFS( classname ), "info_player_deathmatch" ) ) != NULL ) {
+        totalDeathmatch++;
         if ( SpotWouldTelefrag( spot ) ) {
+            telefragCount++;
             continue;
         }
         spots[ count ] = spot;
@@ -249,8 +256,13 @@ gentity_t *SelectRandomDeathmatchSpawnPoint( void ) {
         }
     }
 
+    G_Printf( "SelectRandomDeathmatchSpawnPoint: found %d info_player_start, %d info_player_deathmatch, %d would telefrag, %d usable\n",
+              totalPlayerStart, totalDeathmatch, telefragCount, count );
+
     if ( !count ) { // no spots that won't telefrag
-        return G_Find( NULL, FOFS( classname ), "info_player_start" );
+        spot = G_Find( NULL, FOFS( classname ), "info_player_start" );
+        G_Printf( "SelectRandomDeathmatchSpawnPoint: fallback info_player_start = %s\n", spot ? "found" : "NULL" );
+        return spot;
     }
 
     selection = rand() % count;

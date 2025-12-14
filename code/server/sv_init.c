@@ -728,6 +728,7 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 
 	Com_Printf( "------ Server Initialization ------\n" );
 	Com_Printf( "Server: %s\n",server );
+	Com_Printf( "SV_SpawnServer: Starting full server initialization for map '%s'\n", server );
 
 	// if not running a dedicated server CL_MapLoading will connect the client to the server
 	// also print some status stuff
@@ -821,12 +822,18 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 	// make sure we are not paused
 	Cvar_Set( "cl_paused", "0" );
 
+	Com_Printf( "SV_SpawnServer: About to call FS_Restart\n" );
+
 	// get a new checksum feed and restart the file system
 	sv.checksumFeed = ( ( (unsigned int)rand() << 16 ) ^ (unsigned int)rand() ) ^ Com_Milliseconds();
 
 	FS_Restart( sv.checksumFeed );
 
+	Com_Printf( "SV_SpawnServer: About to call CM_LoadMap for '%s'\n", server );
+
 	CM_LoadMap( va( "maps/%s.bsp", server ), qfalse, &checksum );
+
+	Com_Printf( "SV_SpawnServer: CM_LoadMap completed, CM_EntityString returns: %.200s\n", CM_EntityString() );
 
 	// set serverinfo visible name
 	Cvar_Set( "mapname", server );
@@ -841,6 +848,8 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 	// clear physics interaction links
 	SV_ClearWorld();
 
+	Com_Printf( "SV_SpawnServer: About to call SV_InitGameProgs\n" );
+
 	// media configstring setting should be done during
 	// the loading stage, so connected clients don't have
 	// to load during actual gameplay
@@ -848,6 +857,8 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 
 	// load and spawn all other entities
 	SV_InitGameProgs();
+	
+	Com_Printf( "SV_SpawnServer: SV_InitGameProgs completed\n" );
 
 	// don't allow a map_restart if game is modified
 	sv_gametype->modified = qfalse;

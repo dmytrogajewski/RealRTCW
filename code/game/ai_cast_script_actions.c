@@ -3929,6 +3929,9 @@ qboolean AICast_ScriptAction_ChangeLevel( cast_state_t *cs, char *params ) {
 	level.reloadDelayTime = level.time + 1000 + exitTime;
 	trap_Cvar_Set( "g_reloading", va( "%d", RELOAD_NEXTMAP_WAITING ) );
 
+	G_Printf( "AICast_ScriptAction_ChangeLevel: setting nextMap='%s', reloadDelayTime=%d, g_reloading=%d\n", 
+		newstr, level.reloadDelayTime, RELOAD_NEXTMAP_WAITING );
+
 	// Commented this out, moved elsewhere
 	/*if ( endgame ) {
 		//trap_Cvar_Set( "g_reloading", va( "%d", RELOAD_ENDGAME ) );

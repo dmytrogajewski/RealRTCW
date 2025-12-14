@@ -920,9 +920,24 @@ Called for both a full init and a restart
 */
 static void SV_InitGameVM( qboolean restart ) {
 	int i;
+	const char *entityString;
+	int entityStringLen;
 
 	// start the entity parsing at the beginning
-	sv.entityParsePoint = CM_EntityString();
+	entityString = CM_EntityString();
+	
+	// CRITICAL FIX: Make a copy of the entity string!
+	// The client's CM_LoadMap can overwrite CM_EntityString() during initialization,
+	// so we need to preserve our own copy for the server-side game VM.
+	if ( entityString ) {
+		entityStringLen = strlen( entityString );
+		sv.entityParsePoint = (char *)Hunk_Alloc( entityStringLen + 1, h_high );
+		strcpy( sv.entityParsePoint, entityString );
+		Com_Printf( "SV_InitGameVM: Copied entity string (%d bytes), first 200 chars: %.200s\n", entityStringLen, sv.entityParsePoint );
+	} else {
+		sv.entityParsePoint = NULL;
+		Com_Printf( "SV_InitGameVM: WARNING - entityParsePoint is NULL!\n" );
+	}
 
 	// clear all gentity pointers that might still be set from
 	// a previous level

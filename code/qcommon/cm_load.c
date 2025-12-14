@@ -2,9 +2,9 @@
 ===========================================================================
 
 Return to Castle Wolfenstein single player GPL Source Code
-Copyright (C) 1999-2010 id Software LLC, a ZeniMax Media company. 
+Copyright (C) 1999-2010 id Software LLC, a ZeniMax Media company.
 
-This file is part of the Return to Castle Wolfenstein single player GPL Source Code (RTCW SP Source Code).  
+This file is part of the Return to Castle Wolfenstein single player GPL Source Code (RTCW SP Source Code).
 
 RTCW SP Source Code is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -669,7 +669,6 @@ void CM_LoadMap( const char *name, qboolean clientload, int *checksum ) {
 #endif
 
 	cmod_base = (byte *)buf.i;
-
 	// load into heap
 	CMod_LoadShaders( &header.lumps[LUMP_SHADERS] );
 	CMod_LoadLeafs( &header.lumps[LUMP_LEAFS] );
@@ -874,5 +873,3 @@ void CM_ModelBounds( clipHandle_t model, vec3_t mins, vec3_t maxs ) {
 	VectorCopy( cmod->mins, mins );
 	VectorCopy( cmod->maxs, maxs );
 }
-
-

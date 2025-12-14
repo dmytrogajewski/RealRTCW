@@ -751,6 +751,9 @@ qboolean G_CallSpawn( gentity_t *ent ) {
 	for ( s = spawns ; s->name ; s++ ) {
 		if ( !strcmp( s->name, ent->classname ) ) {
 			// found it
+			if ( !strcmp( ent->classname, "info_player_start" ) || !strcmp( ent->classname, "info_player_deathmatch" ) ) {
+				G_Printf( "G_CallSpawn: spawning %s at (%f, %f, %f)\n", ent->classname, ent->s.origin[0], ent->s.origin[1], ent->s.origin[2] );
+			}
 			s->spawn( ent );
 
 			// RF, entity scripting
@@ -1236,9 +1239,12 @@ Parses textual entity definitions out of an entstring and spawns gentities.
 ==============
 */
 void G_SpawnEntitiesFromString( void ) {
+	int entityCount = 0;
 	// allow calls to G_Spawn*()
 	level.spawning = qtrue;
 	level.numSpawnVars = 0;
+
+	G_Printf( "G_SpawnEntitiesFromString: starting entity parsing\n" );
 
 	// the worldspawn is not an actual entity, but it still
 	// has a "spawn" function to perform any global setup
@@ -1247,11 +1253,15 @@ void G_SpawnEntitiesFromString( void ) {
 		G_Error( "SpawnEntities: no entities" );
 	}
 	SP_worldspawn();
+	entityCount++;
 
 	// parse ents
 	while ( G_ParseSpawnVars() ) {
 		G_SpawnGEntityFromSpawnVars();
+		entityCount++;
 	}
+
+	G_Printf( "G_SpawnEntitiesFromString: parsed %d entities from BSP\n", entityCount );
 
 		G_LoadEntsFile();
 		G_ParseExtraSpawnVars();

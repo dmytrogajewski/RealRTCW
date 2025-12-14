@@ -159,6 +159,10 @@ void G_LoadArenas( void ) {
     int dirlen;
     char        *type;
 
+    // Reset arena count to prevent accumulation across level loads
+    g_numArenas = 0;
+    memset( g_arenaInfos, 0, sizeof( g_arenaInfos ) );
+
     trap_Cvar_Register( &arenasFile, "g_arenasFile", "", CVAR_INIT | CVAR_ROM );
     if ( *arenasFile.string ) { 
         G_LoadArenasFromFile( arenasFile.string );

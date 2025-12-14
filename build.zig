@@ -280,7 +280,8 @@ pub fn build(b: *std.Build) void {
 
         qagame.linkSystemLibrary("m");
         // Link llama.cpp libraries
-        qagame.addLibraryPath(.{ .cwd_relative = "code/llama.cpp/build/bin" });
+        const root = "/home/dmitriy/sources/RealRTCW/";
+        qagame.addLibraryPath(.{ .cwd_relative = root ++ "code/llama.cpp/build/bin" });
         qagame.linkSystemLibrary("llama");
         qagame.linkSystemLibrary("ggml");
         qagame.linkSystemLibrary("ggml-base");
@@ -435,6 +436,318 @@ pub fn build(b: *std.Build) void {
     print_done.step.dependOn(&cp_llama.step);
     print_done.step.dependOn(&create_cfg.step);
     install_steam_step.dependOn(&print_done.step);
+
+    // Build output directory
+    const build_dir = "build/release-linux-x86_64";
+    const build_main_dir = build_dir ++ "/main";
+    const lock_file = build_main_dir ++ "/.assets.lock";
+
+    // =========================================================================
+    // Lock step - protect assets from being overwritten
+    // =========================================================================
+    const lock_step = b.step("lock", "Lock game assets to prevent copy-assets from overwriting them");
+    const lock_cmd = b.addSystemCommand(&.{
+        "sh", "-c",
+        b.fmt(
+            \\mkdir -p {s} && touch {s} && echo "Assets locked. Run 'zig build unlock' to allow copy-assets again."
+        , .{ build_main_dir, lock_file }),
+    });
+    lock_step.dependOn(&lock_cmd.step);
+
+    // =========================================================================
+    // Unlock step - allow assets to be overwritten
+    // =========================================================================
+    const unlock_step = b.step("unlock", "Unlock game assets to allow copy-assets to overwrite them");
+    const unlock_cmd = b.addSystemCommand(&.{
+        "sh", "-c",
+        b.fmt(
+            \\rm -f {s} && echo "Assets unlocked. You can now run 'zig build copy-assets'."
+        , .{lock_file}),
+    });
+    unlock_step.dependOn(&unlock_cmd.step);
+
+    // =========================================================================
+    // Copy Assets step - creates self-contained game directory with unpacked assets
+    // =========================================================================
+    const copy_assets_step = b.step("copy-assets", "Copy and unpack game assets to build directory for development");
+    copy_assets_step.dependOn(b.getInstallStep());
+
+    // Create the extraction script that handles pk3 unpacking with date-based conflict resolution
+    // This script:
+    // 1. Creates the directory structure
+    // 2. Copies pk3 files from RTCW and RealRTCW Steam installations
+    // 3. Extracts pk3 files to loose files, using newer files on conflicts
+    // 4. Copies binaries from zig-out
+    const extract_script = b.addSystemCommand(&.{
+        "sh", "-c",
+        b.fmt(
+            \\#!/bin/sh
+            \\set -e
+            \\
+            \\BUILD_DIR="{s}"
+            \\MAIN_DIR="{s}"
+            \\RTCW_DIR="{s}/Main"
+            \\REALRTCW_DIR="{s}/main"
+            \\ARCH="{s}"
+            \\LOCK_FILE="{s}"
+            \\
+            \\# Check for lock file
+            \\if [ -f "$LOCK_FILE" ]; then
+            \\    echo "ERROR: Assets are locked!"
+            \\    echo "Your game assets are protected from being overwritten."
+            \\    echo "If you really want to re-extract assets, run: zig build unlock"
+            \\    exit 1
+            \\fi
+            \\
+            \\echo "=== RealRTCW Asset Copy and Extraction ==="
+            \\echo ""
+            \\
+            \\# Clean up old symlinks first
+            \\echo "Cleaning up old symlinks..."
+            \\find "$MAIN_DIR" -type l -delete 2>/dev/null || true
+            \\
+            \\# Create directories
+            \\echo "Creating directory structure..."
+            \\mkdir -p "$MAIN_DIR"
+            \\
+            \\# Function to extract pk3 with date-based conflict resolution
+            \\extract_pk3() {{
+            \\    local pk3_file="$1"
+            \\    local target_dir="$2"
+            \\
+            \\    if [ ! -f "$pk3_file" ]; then
+            \\        echo "  Skipping (not found): $pk3_file"
+            \\        return
+            \\    fi
+            \\
+            \\    echo "  Extracting: $(basename "$pk3_file")"
+            \\
+            \\    # Get list of files in pk3
+            \\    unzip -l "$pk3_file" 2>/dev/null | tail -n +4 | head -n -2 | while read -r size date time name; do
+            \\        # Skip directories (size 0 and name ends with /)
+            \\        case "$name" in
+            \\            */) continue ;;
+            \\        esac
+            \\
+            \\        # Skip empty names
+            \\        [ -z "$name" ] && continue
+            \\
+            \\        target_file="$target_dir/$name"
+            \\        target_parent=$(dirname "$target_file")
+            \\
+            \\        # Create parent directory if needed
+            \\        [ ! -d "$target_parent" ] && mkdir -p "$target_parent"
+            \\
+            \\        # Check if file exists and compare dates
+            \\        if [ -f "$target_file" ]; then
+            \\            # Get pk3 file date (from zip listing, format: MM-DD-YYYY or YYYY-MM-DD)
+            \\            pk3_date=$(unzip -l "$pk3_file" "$name" 2>/dev/null | grep "$name" | awk '{{print $2, $3}}')
+            \\            existing_date=$(stat -c %Y "$target_file" 2>/dev/null || echo "0")
+            \\
+            \\            # For simplicity, always extract newer pk3s (they're processed in order)
+            \\            # Later pk3s in the list override earlier ones
+            \\            unzip -o -j "$pk3_file" "$name" -d "$target_parent" 2>/dev/null || true
+            \\        else
+            \\            # File doesn't exist, extract it
+            \\            unzip -o -j "$pk3_file" "$name" -d "$target_parent" 2>/dev/null || true
+            \\        fi
+            \\    done
+            \\}}
+            \\
+            \\# Better extraction function using unzip directly with directory structure
+            \\# All files are extracted to lowercase paths for Linux compatibility
+            \\extract_pk3_simple() {{
+            \\    local pk3_file="$1"
+            \\    local target_dir="$2"
+            \\
+            \\    if [ ! -f "$pk3_file" ]; then
+            \\        echo "  Skipping (not found): $pk3_file"
+            \\        return
+            \\    fi
+            \\
+            \\    echo "  Extracting: $(basename "$pk3_file")"
+            \\    # -o overwrites existing files (later pk3s override earlier ones = correct behavior)
+            \\    # -q quiet mode
+            \\    # -LL converts all filenames to lowercase
+            \\    unzip -o -q -LL "$pk3_file" -d "$target_dir" 2>/dev/null || true
+            \\}}
+            \\
+            \\echo ""
+            \\echo "Extracting RTCW base assets..."
+            \\extract_pk3_simple "$RTCW_DIR/pak0.pk3" "$MAIN_DIR"
+            \\extract_pk3_simple "$RTCW_DIR/sp_pak1.pk3" "$MAIN_DIR"
+            \\extract_pk3_simple "$RTCW_DIR/sp_pak2.pk3" "$MAIN_DIR"
+            \\extract_pk3_simple "$RTCW_DIR/sp_pak3.pk3" "$MAIN_DIR"
+            \\extract_pk3_simple "$RTCW_DIR/sp_pak4.pk3" "$MAIN_DIR"
+            \\
+            \\echo ""
+            \\echo "Extracting RealRTCW base assets (pak0, sp_pak*)..."
+            \\extract_pk3_simple "$REALRTCW_DIR/pak0.pk3" "$MAIN_DIR"
+            \\extract_pk3_simple "$REALRTCW_DIR/sp_pak1.pk3" "$MAIN_DIR"
+            \\extract_pk3_simple "$REALRTCW_DIR/sp_pak2.pk3" "$MAIN_DIR"
+            \\extract_pk3_simple "$REALRTCW_DIR/sp_pak3.pk3" "$MAIN_DIR"
+            \\extract_pk3_simple "$REALRTCW_DIR/sp_pak4.pk3" "$MAIN_DIR"
+            \\
+            \\echo ""
+            \\echo "Extracting RealRTCW addon assets (z_realrtcw*, z_z*)..."
+            \\# Extract in alphabetical order so z_zz* files override z_* files
+            \\for pk3 in "$REALRTCW_DIR"/z_realrtcw*.pk3 "$REALRTCW_DIR"/z_z*.pk3; do
+            \\    extract_pk3_simple "$pk3" "$MAIN_DIR"
+            \\done
+            \\
+            \\echo ""
+            \\echo "Copying configuration files..."
+            \\cp -f "$REALRTCW_DIR"/*.cfg "$MAIN_DIR/" 2>/dev/null || true
+            \\cp -f main/*.cfg "$MAIN_DIR/" 2>/dev/null || true
+            \\
+            \\echo ""
+            \\echo "Copying LLM models..."
+            \\mkdir -p "$MAIN_DIR/models"
+            \\cp -rf main/models/* "$MAIN_DIR/models/" 2>/dev/null || true
+            \\
+            \\echo ""
+            \\echo "Copying TTS files..."
+            \\cp -rf main/tts "$MAIN_DIR/" 2>/dev/null || true
+            \\
+            \\echo ""
+            \\echo "Fixing case-sensitivity in text files..."
+            \\# Convert all path references in skin, shader, script files to lowercase
+            \\# This fixes Linux case-sensitivity issues with assets originally made for Windows
+            \\fix_case_in_file() {{
+            \\    local file="$1"
+            \\    # Only process text files
+            \\    if file "$file" | grep -q "text"; then
+            \\        # Convert common path patterns to lowercase
+            \\        # models/players/*, models/weapons/*, textures/*, etc.
+            \\        sed -i 's|\(models/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
+            \\        sed -i 's|\(textures/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
+            \\        sed -i 's|\(gfx/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
+            \\        sed -i 's|\(sprites/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
+            \\        sed -i 's|\(sound/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
+            \\        sed -i 's|\(scripts/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
+            \\    fi
+            \\}}
+            \\
+            \\# Fix all skin files
+            \\find "$MAIN_DIR" -name "*.skin" -type f | while read -r f; do
+            \\    fix_case_in_file "$f"
+            \\done
+            \\
+            \\# Fix all shader files
+            \\find "$MAIN_DIR" -name "*.shader" -type f | while read -r f; do
+            \\    fix_case_in_file "$f"
+            \\done
+            \\
+            \\# Fix all script files
+            \\find "$MAIN_DIR" -name "*.script" -type f | while read -r f; do
+            \\    fix_case_in_file "$f"
+            \\done
+            \\
+            \\# Fix all menu/def files
+            \\find "$MAIN_DIR" -name "*.menu" -type f | while read -r f; do
+            \\    fix_case_in_file "$f"
+            \\done
+            \\find "$MAIN_DIR" -name "*.def" -type f | while read -r f; do
+            \\    fix_case_in_file "$f"
+            \\done
+            \\
+            \\# Fix font .dat files - they contain binary data with embedded shader paths
+            \\# The paths are stored as fixed-length null-padded strings
+            \\echo "Fixing font dat files..."
+            \\for datfile in "$MAIN_DIR"/fonts/*.dat; do
+            \\    if [ -f "$datfile" ]; then
+            \\        # Replace fontImage with fontimage in the binary file
+            \\        sed -i 's/fontImage/fontimage/g' "$datfile" 2>/dev/null || true
+            \\    fi
+            \\done
+            \\
+            \\echo ""
+            \\echo "Creating GLSL shaders pk3..."
+            \\if [ -d main/glsl ]; then
+            \\    cd main && zip -r -q "../$MAIN_DIR/zzz_glsl_shaders.pk3" glsl && cd ..
+            \\fi
+            \\
+            \\echo ""
+            \\echo "Copying compiled binaries..."
+            \\# Main executable
+            \\cp -f zig-out/bin/iowolfsp "$BUILD_DIR/iowolfsp.$ARCH"
+            \\
+            \\# Renderers
+            \\cp -f zig-out/lib/librenderer_sp_opengl1_$ARCH.so "$BUILD_DIR/renderer_sp_opengl1_$ARCH.so"
+            \\cp -f zig-out/lib/librenderer_sp_rend2_$ARCH.so "$BUILD_DIR/renderer_sp_rend2_$ARCH.so" 2>/dev/null || true
+            \\
+            \\# Game modules
+            \\cp -f zig-out/lib/libcgame.sp.$ARCH.so "$MAIN_DIR/cgame.sp.$ARCH.so"
+            \\cp -f zig-out/lib/libqagame.sp.$ARCH.so "$MAIN_DIR/qagame.sp.$ARCH.so"
+            \\cp -f zig-out/lib/libui.sp.$ARCH.so "$MAIN_DIR/ui.sp.$ARCH.so"
+            \\
+            \\# LLaMA libraries
+            \\cp -f code/llama.cpp/build/bin/*.so* "$BUILD_DIR/" 2>/dev/null || true
+            \\
+            \\echo ""
+            \\echo "=== Asset copy complete! ==="
+            \\echo ""
+            \\echo "Game directory: $BUILD_DIR"
+            \\echo ""
+            \\echo "To run the game:"
+            \\echo "  cd $BUILD_DIR && ./iowolfsp.$ARCH"
+            \\echo ""
+            \\echo "Or with explicit paths:"
+            \\echo "  ./iowolfsp.$ARCH +set fs_basepath $(pwd)/$BUILD_DIR +set fs_homepath $(pwd)/$BUILD_DIR"
+            \\echo ""
+        , .{ build_dir, build_main_dir, steam_rtcw_dir, steam_realrtcw_dir, arch_str, lock_file }),
+    });
+    extract_script.step.dependOn(b.getInstallStep());
+    copy_assets_step.dependOn(&extract_script.step);
+
+    // =========================================================================
+    // Deploy step - copy only compiled binaries to build directory (preserves assets)
+    // =========================================================================
+    const deploy_step = b.step("deploy", "Copy compiled binaries to build directory (preserves game assets)");
+    deploy_step.dependOn(b.getInstallStep());
+
+    const deploy_script = b.addSystemCommand(&.{
+        "sh", "-c",
+        b.fmt(
+            \\#!/bin/sh
+            \\set -e
+            \\BUILD_DIR="{s}"
+            \\MAIN_DIR="{s}"
+            \\ARCH="{s}"
+            \\
+            \\mkdir -p "$MAIN_DIR"
+            \\
+            \\# Main executable
+            \\cp -f zig-out/bin/iowolfsp "$BUILD_DIR/iowolfsp.$ARCH"
+            \\
+            \\# Renderers
+            \\cp -f zig-out/lib/librenderer_sp_opengl1_$ARCH.so "$BUILD_DIR/renderer_sp_opengl1_$ARCH.so"
+            \\cp -f zig-out/lib/librenderer_sp_rend2_$ARCH.so "$BUILD_DIR/renderer_sp_rend2_$ARCH.so" 2>/dev/null || true
+            \\
+            \\# Game modules
+            \\cp -f zig-out/lib/libcgame.sp.$ARCH.so "$MAIN_DIR/cgame.sp.$ARCH.so"
+            \\cp -f zig-out/lib/libqagame.sp.$ARCH.so "$MAIN_DIR/qagame.sp.$ARCH.so"
+            \\cp -f zig-out/lib/libui.sp.$ARCH.so "$MAIN_DIR/ui.sp.$ARCH.so"
+            \\
+            \\# LLaMA libraries
+            \\cp -f code/llama.cpp/build/bin/*.so* "$BUILD_DIR/" 2>/dev/null || true
+            \\
+            \\echo "Deployed binaries to $BUILD_DIR"
+        , .{ build_dir, build_main_dir, arch_str }),
+    });
+    deploy_script.step.dependOn(b.getInstallStep());
+    deploy_step.dependOn(&deploy_script.step);
+
+    // =========================================================================
+    // Run step - deploy binaries and run the game
+    // =========================================================================
+    const run_step = b.step("run", "Run the game from build directory");
+    const run_cmd = b.addSystemCommand(&.{
+        "sh",                                                        "-c",
+        b.fmt("cd {s} && ./iowolfsp.{s}", .{ build_dir, arch_str }),
+    });
+    run_cmd.step.dependOn(deploy_step);
+    run_step.dependOn(&run_cmd.step);
 }
 
 // =============================================================================
@@ -1147,6 +1460,9 @@ fn addQagameSources(b: *std.Build, lib: *std.Build.Step.Compile, game_cflags: []
         .files = &.{"code/game/ai_llm.cpp"},
         .flags = cpp_flags,
     });
+
+    const root = "/home/dmitriy/sources/RealRTCW/";
+    lib.addLibraryPath(.{ .cwd_relative = root ++ "code/llama.cpp/build/bin" });
 }
 
 fn addUiSources(b: *std.Build, lib: *std.Build.Step.Compile, game_cflags: []const []const u8) void {
@@ -1475,7 +1791,6 @@ fn addFreetypeSources(lib: *std.Build.Step.Compile) void {
             "-fPIC",
             "-O3",
             "-DFT2_BUILD_LIBRARY",
-            "-Wno-dangling-pointer",
         },
     });
 }
@@ -1485,46 +1800,48 @@ fn addFreetypeSources(lib: *std.Build.Step.Compile) void {
 // =============================================================================
 
 fn addCommonIncludes(compile: *std.Build.Step.Compile, use_internal_libs: bool) void {
-    compile.addIncludePath(.{ .cwd_relative = "code" });
-    compile.addIncludePath(.{ .cwd_relative = "code/qcommon" });
-    compile.addIncludePath(.{ .cwd_relative = "code/client" });
-    compile.addIncludePath(.{ .cwd_relative = "code/server" });
-    compile.addIncludePath(.{ .cwd_relative = "code/renderer" });
-    compile.addIncludePath(.{ .cwd_relative = "code/botlib" });
-    compile.addIncludePath(.{ .cwd_relative = "code/splines" });
-    compile.addIncludePath(.{ .cwd_relative = "code/sys" });
-    compile.addIncludePath(.{ .cwd_relative = "code/sdl" });
+    const root = "/home/dmitriy/sources/RealRTCW/";
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/qcommon" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/client" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/server" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/renderer" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/botlib" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/splines" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/sys" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/sdl" });
 
     if (use_internal_libs) {
-        compile.addIncludePath(.{ .cwd_relative = "code/SDL2/include" });
-        compile.addIncludePath(.{ .cwd_relative = "code/AL" });
-        compile.addIncludePath(.{ .cwd_relative = "code/zlib-1.2.11" });
-        compile.addIncludePath(.{ .cwd_relative = "code/jpeg-8c" });
-        compile.addIncludePath(.{ .cwd_relative = "code/libogg-1.3.3/include" });
-        compile.addIncludePath(.{ .cwd_relative = "code/libvorbis-1.3.6/include" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/SDL2/include" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/AL" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/zlib-1.2.11" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/jpeg-8c" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/libogg-1.3.3/include" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/libvorbis-1.3.6/include" });
         // Note: code/libvorbis-1.3.6/lib is NOT added here because its mdct.h
         // conflicts with opus's mdct.h. Vorbis sources include it via -I flag.
-        compile.addIncludePath(.{ .cwd_relative = "code/opus-1.2.1/include" });
-        compile.addIncludePath(.{ .cwd_relative = "code/opus-1.2.1/celt" });
-        compile.addIncludePath(.{ .cwd_relative = "code/opus-1.2.1/silk" });
-        compile.addIncludePath(.{ .cwd_relative = "code/opus-1.2.1/silk/float" });
-        compile.addIncludePath(.{ .cwd_relative = "code/opusfile-0.9/include" });
-        compile.addIncludePath(.{ .cwd_relative = "code/freetype-2.9/include" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/opus-1.2.1/include" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/opus-1.2.1/celt" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/opus-1.2.1/silk" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/opus-1.2.1/silk/float" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/opusfile-0.9/include" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/freetype-2.9/include" });
     }
 }
 
 fn addRendererIncludes(compile: *std.Build.Step.Compile, use_internal_libs: bool, use_freetype: bool) void {
-    compile.addIncludePath(.{ .cwd_relative = "code" });
-    compile.addIncludePath(.{ .cwd_relative = "code/qcommon" });
-    compile.addIncludePath(.{ .cwd_relative = "code/renderer" });
-    compile.addIncludePath(.{ .cwd_relative = "code/rend2" });
-    compile.addIncludePath(.{ .cwd_relative = "code/sdl" });
+    const root = "/home/dmitriy/sources/RealRTCW/";
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/qcommon" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/renderer" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/rend2" });
+    compile.addIncludePath(.{ .cwd_relative = root ++ "code/sdl" });
 
     if (use_internal_libs) {
-        compile.addIncludePath(.{ .cwd_relative = "code/SDL2/include" });
-        compile.addIncludePath(.{ .cwd_relative = "code/jpeg-8c" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/SDL2/include" });
+        compile.addIncludePath(.{ .cwd_relative = root ++ "code/jpeg-8c" });
         if (use_freetype) {
-            compile.addIncludePath(.{ .cwd_relative = "code/freetype-2.9/include" });
+            compile.addIncludePath(.{ .cwd_relative = root ++ "code/freetype-2.9/include" });
         }
     }
 }

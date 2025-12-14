@@ -1371,6 +1371,8 @@ extern void trap_Cvar_Reset( const char *var_name );
 void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	int i;
 
+	G_Printf( "G_InitGame: Called with levelTime=%d, randomSeed=%d, restart=%d\n", levelTime, randomSeed, restart );
+
 	steamInit();
 	
 	// Pause LLM processing during initialization
@@ -1527,8 +1529,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	G_ResetRemappedShaders();
 
+	G_Printf( "G_InitGame: About to call G_SpawnEntitiesFromString\n" );
+
 	// parse the key/value pairs and spawn gentities
 	G_SpawnEntitiesFromString();
+
+	G_Printf( "G_InitGame: G_SpawnEntitiesFromString completed\n" );
 
 	// create the camera entity that will communicate with the scripts
 	G_SpawnScriptCamera();
@@ -2425,13 +2431,21 @@ CheckReloadStatus
 =============
 */
 void CheckReloadStatus( void ) {
+	static int lastDebugTime = 0;
 	// if we are waiting for a reload, check the delay time
 	if ( g_reloading.integer ) {
+		// Debug every second
+		if ( level.time - lastDebugTime > 1000 ) {
+			G_Printf( "CheckReloadStatus: g_reloading=%d, reloadDelayTime=%d, level.time=%d\n", 
+				g_reloading.integer, level.reloadDelayTime, level.time );
+			lastDebugTime = level.time;
+		}
 		if ( level.reloadDelayTime ) {
 			if ( level.reloadDelayTime < level.time ) {
 
 				if ( g_reloading.integer == RELOAD_NEXTMAP_WAITING ) {
 					trap_Cvar_Set( "g_reloading", va( "%d", RELOAD_NEXTMAP ) ); // set so sv_map_f will know it's okay to start a map
+					G_Printf( "CheckReloadStatus: g_gametype=%d, nextMap=%s\n", g_gametype.integer, level.nextMap );
 				  if ( g_gametype.integer == GT_SINGLE_PLAYER ) {
 					if ( g_cheats.integer ) {
 						trap_SendConsoleCommand( EXEC_APPEND, va( "spdevmap %s\n", level.nextMap ) );
@@ -2450,6 +2464,14 @@ void CheckReloadStatus( void ) {
 					} else {
 						trap_SendConsoleCommand( EXEC_APPEND, va( "svmap %s\n", level.nextMap ) );
 					} 
+				  } else {
+					// Fallback for GT_NONE or any other gametype - use spmap for single-player
+					G_Printf( "CheckReloadStatus: WARNING - unhandled gametype %d, using spmap\n", g_gametype.integer );
+					if ( g_cheats.integer ) {
+						trap_SendConsoleCommand( EXEC_APPEND, va( "spdevmap %s\n", level.nextMap ) );
+					} else {
+						trap_SendConsoleCommand( EXEC_APPEND, va( "spmap %s\n", level.nextMap ) );
+					}
 				  }
 				}
 				else if (g_reloading.integer == RELOAD_ENDGAME)

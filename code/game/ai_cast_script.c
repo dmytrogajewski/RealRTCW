@@ -710,6 +710,9 @@ void AICast_ScriptLoad( void ) {
 	} else {
 		trap_Cvar_Register( &mapname, "mapname", "", CVAR_SERVERINFO | CVAR_ROM );
 	}
+	
+	G_Printf( "AICast_ScriptLoad: mapname='%s', g_gameskill=%d\n", mapname.string, g_gameskill.integer );
+	
 	//Q_strncpyz( filename, "maps/", sizeof( filename ) );
 	// RealRTCW new difficulty system
 	if ( g_gameskill.integer == GSKILL_EASY ) {
@@ -730,9 +733,11 @@ void AICast_ScriptLoad( void ) {
 	Q_strcat( filename, sizeof( filename ), mapname.string );
 	Q_strcat( filename, sizeof( filename ), ".ai" );
 
+	G_Printf( "AICast_ScriptLoad: Trying difficulty-specific file '%s'\n", filename );
 	len = trap_FS_FOpenFile( filename, &f, FS_READ );
 
 	if ( len < 0 ) {
+		G_Printf( "AICast_ScriptLoad: Difficulty-specific file not found, trying fallback...\n" );
 
 		// Check for original ai script
 		trap_Cvar_VariableStringBuffer( "ai_scriptName", filename, sizeof( filename ) );
@@ -741,16 +746,26 @@ void AICast_ScriptLoad( void ) {
 		Q_strcat( filename, sizeof( filename ), mapname.string );
 		Q_strcat( filename, sizeof( filename ), ".ai" );
 
+		G_Printf( "AICast_ScriptLoad: Trying fallback file '%s'\n", filename );
 		len = trap_FS_FOpenFile( filename, &f, FS_READ );
 		// make sure we clear out the temporary scriptname
 		trap_Cvar_Set( "ai_scriptName", "" );
 		if ( len < 0 ) {
+			G_Printf( "AICast_ScriptLoad: No AI script found for map '%s'\n", mapname.string );
 			return;
 		}
 	}
 
+	G_Printf( "AICast_ScriptLoad: Loaded '%s' (%d bytes)\n", filename, len );
 	level.scriptAI = G_Alloc( len );
 	trap_FS_Read( level.scriptAI, len, f );
+	
+	// Print first 200 chars of script for debugging
+	char debugBuf[201];
+	int debugLen = (len > 200) ? 200 : len;
+	memcpy( debugBuf, level.scriptAI, debugLen );
+	debugBuf[debugLen] = '\0';
+	G_Printf( "AICast_ScriptLoad: First 200 chars:\n%s\n", debugBuf );
 
 	trap_FS_FCloseFile( f );
 

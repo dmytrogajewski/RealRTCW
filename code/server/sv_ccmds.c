@@ -170,9 +170,12 @@ static void SV_Map_f( void ) {
 		return;
 	}
 
+	Com_Printf( "SV_Map_f: called with map='%s', sv_reloading=%d\n", map, sv_reloading->integer );
+
 	buildScript = Cvar_VariableIntegerValue( "com_buildScript" );
 
 	if ( !buildScript && sv_reloading->integer && sv_reloading->integer != RELOAD_NEXTMAP ) {  // game is in 'reload' mode, don't allow starting new maps yet.
+		Com_Printf( "SV_Map_f: BLOCKED - sv_reloading=%d is not RELOAD_NEXTMAP (%d)\n", sv_reloading->integer, RELOAD_NEXTMAP );
 		return;
 	}
 
@@ -287,7 +290,7 @@ static void SV_Map_f( void ) {
 			killBots = qfalse;
 		}
 		if ( sv_gametype->integer == GT_SINGLE_PLAYER ) {
-			Cvar_SetValue( "g_gametype", GT_NONE );
+			Cvar_SetValue( "g_gametype", GT_SINGLE_PLAYER );
 		}
 	}
 
