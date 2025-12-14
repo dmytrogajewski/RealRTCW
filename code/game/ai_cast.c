@@ -741,10 +741,19 @@ void AICast_CheckLoadGame( void ) {
 	gentity_t *ent = NULL;
 	qboolean ready;
 	cast_state_t *pcs;
+	static int spawnWaitStartTime = 0;
+	static qboolean spawnMismatchLogged = qfalse;
 
 	// have we already done the save or load?
 	if ( !saveGamePending ) {
+		spawnWaitStartTime = 0;
+		spawnMismatchLogged = qfalse;
 		return;
+	}
+	
+	// Track when we started waiting for spawns
+	if ( spawnWaitStartTime == 0 ) {
+		spawnWaitStartTime = level.time;
 	}
 
 	// tell the cgame NOT to render the scene while we are waiting for things to settle
@@ -764,17 +773,33 @@ void AICast_CheckLoadGame( void ) {
 		}
 
 		ready = qtrue;
+		ent = AICast_FindEntityForName( "player" );
+		
 		if ( numSpawningCast != numcast ) {
+			// Log mismatch once for debugging
+			if ( !spawnMismatchLogged ) {
+				G_Printf( "^3WARNING: AI spawn count mismatch: numSpawningCast=%d, numcast=%d\n", numSpawningCast, numcast );
+				spawnMismatchLogged = qtrue;
+			}
+			// Allow timeout after 2 seconds to prevent permanent hang
+			if ( level.time - spawnWaitStartTime > 2000 ) {
+				G_Printf( "^1ERROR: AI spawn timeout after 2s. Proceeding anyway. numSpawningCast=%d, numcast=%d\n", numSpawningCast, numcast );
+			} else {
+				ready = qfalse;
+			}
+		}
+		
+		if ( ready && !ent ) {
 			ready = qfalse;
-		} else if ( !( ent = AICast_FindEntityForName( "player" ) ) ) {
-			ready = qfalse;
-		} else if ( !ent->client || ent->client->pers.connected != CON_CONNECTED ) {
+		} else if ( ready && ( !ent->client || ent->client->pers.connected != CON_CONNECTED ) ) {
 			ready = qfalse;
 		}
 
 		if ( ready ) {
 			trap_Cvar_Set( "savegame_loading", "0" ); // in-case it aborts
 			saveGamePending = qfalse;
+			spawnWaitStartTime = 0;
+			spawnMismatchLogged = qfalse;
 			G_LoadGame( NULL );		// always load the "current" savegame
 //			trap_Cvar_Set( "cg_norender", "0" );
 
@@ -801,16 +826,32 @@ void AICast_CheckLoadGame( void ) {
 	} else {
 
 		ready = qtrue;
+		ent = AICast_FindEntityForName( "player" );
+		
 		if ( numSpawningCast != numcast ) {
+			// Log mismatch once for debugging
+			if ( !spawnMismatchLogged ) {
+				G_Printf( "^3WARNING: AI spawn count mismatch: numSpawningCast=%d, numcast=%d\n", numSpawningCast, numcast );
+				spawnMismatchLogged = qtrue;
+			}
+			// Allow timeout after 2 seconds to prevent permanent hang
+			if ( level.time - spawnWaitStartTime > 2000 ) {
+				G_Printf( "^1ERROR: AI spawn timeout after 2s. Proceeding anyway. numSpawningCast=%d, numcast=%d\n", numSpawningCast, numcast );
+			} else {
+				ready = qfalse;
+			}
+		}
+		
+		if ( ready && !ent ) {
 			ready = qfalse;
-		} else if ( !( ent = AICast_FindEntityForName( "player" ) ) ) {
-			ready = qfalse;
-		} else if ( !ent->client || ent->client->pers.connected != CON_CONNECTED ) {
+		} else if ( ready && ( !ent->client || ent->client->pers.connected != CON_CONNECTED ) ) {
 			ready = qfalse;
 		}
 
 		// not loading a game, we must be in a new level, so look for some persistant data to read in, then save the game
 		if ( ready ) {
+			spawnWaitStartTime = 0;
+			spawnMismatchLogged = qfalse;
 			G_LoadPersistant();		// make sure we save the game after we have brought across the items
 
 			trap_Cvar_Set( "g_totalPlayTime", "0" );  // reset play time
