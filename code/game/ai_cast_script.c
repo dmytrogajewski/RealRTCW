@@ -45,6 +45,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "../botlib/botai.h"          //bot ai interface
 
 #include "ai_cast.h"
+#include "ai_squad.h"
 
 /*
 Scripting that allows the designers to control the behaviour of AI characters
@@ -1117,6 +1118,7 @@ AICast_ScriptChange
 */
 void AICast_ScriptChange( cast_state_t *cs, int newScriptNum ) {
 	cast_script_status_t scriptStatusBackup;
+	int prevSquadId = cs->squadId;
 
 	cs->scriptCallIndex++;
 
@@ -1140,6 +1142,11 @@ void AICast_ScriptChange( cast_state_t *cs, int newScriptNum ) {
 		cs->castScriptStatus.castScriptEventIndex = scriptStatusBackup.castScriptEventIndex;
 		cs->castScriptStatus.scriptId = scriptStatusBackup.scriptId;
 		cs->castScriptStatus.scriptFlags = scriptStatusBackup.scriptFlags;
+	} else {
+		// Script is still running - remove NPC from squad so script controls behavior
+		if ( prevSquadId >= 0 ) {
+			AICast_RemoveSquadMember( prevSquadId, cs->entityNum );
+		}
 	}
 }
 

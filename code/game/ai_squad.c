@@ -115,8 +115,9 @@ void AICast_AssignSquads(void) {
 			continue;
 		}
 		
-		// Skip NPCs with scripts - they should follow their scripts, not squad tactics
-		if (cs->numCastScriptEvents > 0) {
+		// Skip NPCs that are currently running a script - they should follow their scripts
+		// But allow NPCs that have scripts defined but aren't actively executing them
+		if (cs->castScriptStatus.castScriptEventIndex >= 0) {
 			cs->squadId = -1;
 			cs->squadRole = SQUAD_ROLE_NONE;
 			continue;
@@ -197,9 +198,10 @@ void AICast_AssignSquads(void) {
 	}
 	
 	if (squadsChanged || firstAssignment) {
+		// Always print squad summary (this is important feedback)
+		G_Printf("^5[SQUAD] Assignment: %d NPCs processed, %d squads formed (total cast=%d)\n", 
+		        processedCount, g_squadCount, numcast);
 		if (ai_llm_debug.integer) {
-			G_Printf("Squad assignment: processed %d NPCs, created %d squads (total cast=%d)\n", 
-			        processedCount, g_squadCount, numcast);
 			for (i = 0; i < g_squadCount && i < 10; i++) {
 				G_Printf("  Squad %d: %d members, team %d\n", 
 				        i, g_squads[i].memberCount, g_squads[i].teamNum);
@@ -386,8 +388,8 @@ void AICast_SquadLeaderThink(cast_state_t *cs) {
 		return;
 	}
 	
-	// Skip NPCs with scripts - let the script control behavior
-	if (cs->numCastScriptEvents > 0) {
+	// Skip NPCs currently running a script - let the script control behavior
+	if (cs->castScriptStatus.castScriptEventIndex >= 0) {
 		return;
 	}
 	
@@ -454,8 +456,8 @@ void AICast_SquadMemberExecute(cast_state_t *cs) {
 		return;
 	}
 	
-	// Skip NPCs with scripts - let the script control behavior
-	if (cs->numCastScriptEvents > 0) {
+	// Skip NPCs currently running a script - let the script control behavior
+	if (cs->castScriptStatus.castScriptEventIndex >= 0) {
 		return;
 	}
 	

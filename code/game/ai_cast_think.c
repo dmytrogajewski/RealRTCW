@@ -840,8 +840,8 @@ void AICast_Think( int client, float thinktime ) {
 	}
 	
 	//
-	// Squad Coordination - skip for NPCs with scripts (they should follow scripts, not squad tactics)
-	if ( cs->squadId >= 0 && cs->numCastScriptEvents == 0 ) {
+	// Squad Coordination - skip for NPCs currently running scripts
+	if ( cs->squadId >= 0 && cs->castScriptStatus.castScriptEventIndex < 0 ) {
 		// Squad leaders think tactically
 		if ( cs->squadRole == SQUAD_ROLE_LEADER ) {
 			AICast_SquadLeaderThink( cs );
@@ -855,8 +855,8 @@ void AICast_Think( int client, float thinktime ) {
 	
 	//
 	// Tactical Response: React to enemy sightings by nearby squad members
-	// Skip for NPCs with scripts (they should follow scripts, not squad tactics)
-	if ( ent->aiTeam >= 0 && cs->squadId >= 0 && cs->numCastScriptEvents == 0 ) {
+	// Skip for NPCs currently running scripts
+	if ( ent->aiTeam >= 0 && cs->squadId >= 0 && cs->castScriptStatus.castScriptEventIndex < 0 ) {
 		tactical_memory_t *tm = TacticalMemory_GetForTeam( ent->aiTeam );
 		if ( tm && tm->enemyCount > 0 ) {
 			// Check if we have an enemy in tactical memory that we haven't engaged yet
@@ -956,9 +956,9 @@ void AICast_Think( int client, float thinktime ) {
 			 !cs->llm_pendingStrategicRequest &&
 			 strategicInterval > 0 && 
 			 cs->llm_lastStrategicUpdateTime + strategicInterval < level.time ) {
-			// Skip NPCs with scripts - let their scripts control behavior, not LLM
-			if ( cs->numCastScriptEvents > 0 ) {
-				// Do not request LLM decisions for scripted NPCs
+			// Skip NPCs currently running scripts - let their scripts control behavior, not LLM
+			if ( cs->castScriptStatus.castScriptEventIndex >= 0 ) {
+				// Do not request LLM decisions for NPCs currently executing scripts
 			}
 			// Only request decisions for AI in combat or alert states with enemies
 			// Skip if entity is dead or not in use
@@ -975,8 +975,8 @@ void AICast_Think( int client, float thinktime ) {
 			}
 		}
 		
-		// Check for completed strategic decisions - skip for NPCs with scripts
-		if ( cs->llm_pendingStrategicRequest && cs->numCastScriptEvents == 0 ) {
+		// Check for completed strategic decisions - skip for NPCs currently running scripts
+		if ( cs->llm_pendingStrategicRequest && cs->castScriptStatus.castScriptEventIndex < 0 ) {
 			llm_decision_t decision;
 			if ( LLM_GetStrategicDecision( cs->entityNum, &decision ) ) {
 				cs->llm_pendingStrategicRequest = qfalse;

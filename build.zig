@@ -626,6 +626,7 @@ pub fn build(b: *std.Build) void {
             \\        sed -i 's|\(sound/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
             \\        sed -i 's|\(scripts/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
             \\        sed -i 's|\(ui/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
+            \\        sed -i 's|\(icons/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
             \\    fi
             \\}}
             \\
