@@ -98,7 +98,7 @@ If you have questions concerning this license or the applicable additional terms
 FT_Library ftLibrary = NULL;
 #endif
 
-#define MAX_FONTS 6
+#define MAX_FONTS 16
 static int registeredFontCount = 0;
 static fontInfo_t registeredFont[MAX_FONTS];
 
@@ -374,7 +374,22 @@ void RE_RegisterFont( const char *fontName, int pointSize, fontInfo_t *font ) {
 		return;
 	}
 
-	Com_sprintf( name, sizeof( name ), "fonts/fontimage_%i.dat",pointSize );
+	// Try to load pre-rendered font data
+	// First try font-specific dat file (e.g., fonts/handfont_17.dat)
+	// Then fall back to generic fontimage (e.g., fonts/fontimage_17.dat)
+	{
+		const char *baseName;
+		// Extract base name from path (e.g., "fonts/handfont" -> "handfont")
+		baseName = strrchr( fontName, '/' );
+		if ( baseName ) {
+			baseName++;
+		} else {
+			baseName = fontName;
+		}
+		Com_sprintf( name, sizeof( name ), "fonts/%s_%i.dat", baseName, pointSize );
+	}
+	
+	// Check if this font is already registered
 	for ( i = 0; i < registeredFontCount; i++ ) {
 		if ( Q_stricmp( name, registeredFont[i].name ) == 0 ) {
 			Com_Memcpy( font, &registeredFont[i], sizeof( fontInfo_t ) );
@@ -383,6 +398,18 @@ void RE_RegisterFont( const char *fontName, int pointSize, fontInfo_t *font ) {
 	}
 
 	len = ri.FS_ReadFile( name, NULL );
+	// If font-specific dat not found, try generic fontimage
+	if ( len != sizeof( fontInfo_t ) ) {
+		Com_sprintf( name, sizeof( name ), "fonts/fontimage_%i.dat", pointSize );
+		// Check cache for fallback font too
+		for ( i = 0; i < registeredFontCount; i++ ) {
+			if ( Q_stricmp( name, registeredFont[i].name ) == 0 ) {
+				Com_Memcpy( font, &registeredFont[i], sizeof( fontInfo_t ) );
+				return;
+			}
+		}
+		len = ri.FS_ReadFile( name, NULL );
+	}
 	if ( len == sizeof( fontInfo_t ) ) {
 		ri.FS_ReadFile( name, &faceData );
 		fdOffset = 0;

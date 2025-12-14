@@ -625,6 +625,18 @@ pub fn build(b: *std.Build) void {
             \\        sed -i 's|\(sprites/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
             \\        sed -i 's|\(sound/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
             \\        sed -i 's|\(scripts/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
+            \\        sed -i 's|\(ui/[^,\"[:space:]]*\)|\L\1|gi' "$file" 2>/dev/null || true
+            \\    fi
+            \\}}
+            \\
+            \\# Fix menu files - convert quoted uppercase asset names to lowercase
+            \\fix_menu_case() {{
+            \\    local file="$1"
+            \\    if file "$file" | grep -q "text"; then
+            \\        # Convert background "ASSET" and similar patterns to lowercase
+            \\        sed -i 's/background[[:space:]]*"\([^"]*\)"/background "\L\1"/gi' "$file" 2>/dev/null || true
+            \\        sed -i 's/shader[[:space:]]*"\([^"]*\)"/shader "\L\1"/gi' "$file" 2>/dev/null || true
+            \\        sed -i 's/focusShader[[:space:]]*"\([^"]*\)"/focusShader "\L\1"/gi' "$file" 2>/dev/null || true
             \\    fi
             \\}}
             \\
@@ -646,6 +658,7 @@ pub fn build(b: *std.Build) void {
             \\# Fix all menu/def files
             \\find "$MAIN_DIR" -name "*.menu" -type f | while read -r f; do
             \\    fix_case_in_file "$f"
+            \\    fix_menu_case "$f"
             \\done
             \\find "$MAIN_DIR" -name "*.def" -type f | while read -r f; do
             \\    fix_case_in_file "$f"
@@ -660,6 +673,53 @@ pub fn build(b: *std.Build) void {
             \\        sed -i 's/fontImage/fontimage/g' "$datfile" 2>/dev/null || true
             \\    fi
             \\done
+            \\
+            \\# Fix known typos in skin files
+            \\echo "Fixing skin file typos..."
+            \\# head_escaperadio.skin has "i_headescaperadiotga" instead of "i_headescaperadio.tga"
+            \\if [ -f "$MAIN_DIR/models/players/infantryss/head_escaperadio.skin" ]; then
+            \\    sed -i 's/i_headescaperadiotga/i_headescaperadio.tga/g' "$MAIN_DIR/models/players/infantryss/head_escaperadio.skin"
+            \\fi
+            \\# dog head_default.skin references non-existent d_body1.tga, should be germanshepherd.tga
+            \\if [ -f "$MAIN_DIR/models/players/dog/head_default.skin" ]; then
+            \\    sed -i 's/d_body1.tga/germanshepherd.tga/g' "$MAIN_DIR/models/players/dog/head_default.skin"
+            \\fi
+            \\
+            \\# Fix broken shader files (external script handles CRLF and complex sed patterns)
+            \\if [ -x "scripts/fix-shaders.sh" ]; then
+            \\    scripts/fix-shaders.sh "$MAIN_DIR"
+            \\fi
+            \\
+            \\# Create dog sound aliases - code expects sound/player/dog/death1.wav etc.
+            \\# but RealRTCW has them in subdirectories with different naming
+            \\echo "Creating dog sound aliases..."
+            \\DOG_SND="$MAIN_DIR/sound/player/dog"
+            \\if [ -d "$DOG_SND" ]; then
+            \\    # Death sounds: death1.wav, death2.wav, death3.wav
+            \\    [ -f "$DOG_SND/death/dog_death_1.wav" ] && cp -f "$DOG_SND/death/dog_death_1.wav" "$DOG_SND/death1.wav"
+            \\    [ -f "$DOG_SND/death/dog_death_2.wav" ] && cp -f "$DOG_SND/death/dog_death_2.wav" "$DOG_SND/death2.wav"
+            \\    [ -f "$DOG_SND/death/dog_death_3.wav" ] && cp -f "$DOG_SND/death/dog_death_3.wav" "$DOG_SND/death3.wav"
+            \\    # Pain sounds: pain25_1.wav, pain50_1.wav, pain75_1.wav, pain100_1.wav
+            \\    [ -f "$DOG_SND/pain/dog_pain_1.wav" ] && cp -f "$DOG_SND/pain/dog_pain_1.wav" "$DOG_SND/pain25_1.wav"
+            \\    [ -f "$DOG_SND/pain/dog_pain_2.wav" ] && cp -f "$DOG_SND/pain/dog_pain_2.wav" "$DOG_SND/pain50_1.wav"
+            \\    [ -f "$DOG_SND/pain/dog_pain_3.wav" ] && cp -f "$DOG_SND/pain/dog_pain_3.wav" "$DOG_SND/pain75_1.wav"
+            \\    [ -f "$DOG_SND/pain/dog_pain_4.wav" ] && cp -f "$DOG_SND/pain/dog_pain_4.wav" "$DOG_SND/pain100_1.wav"
+            \\    # Jump sound: use bark sound as jump
+            \\    [ -f "$DOG_SND/bark/dog_bark_1.wav" ] && cp -f "$DOG_SND/bark/dog_bark_1.wav" "$DOG_SND/jump1.wav"
+            \\    # Falling/gasp/drown - dogs probably don't need these, but create empty placeholders or use pain
+            \\    [ -f "$DOG_SND/pain/dog_pain_5.wav" ] && cp -f "$DOG_SND/pain/dog_pain_5.wav" "$DOG_SND/falling1.wav"
+            \\    [ -f "$DOG_SND/pain/dog_pain_1.wav" ] && cp -f "$DOG_SND/pain/dog_pain_1.wav" "$DOG_SND/gasp.wav"
+            \\    [ -f "$DOG_SND/pain/dog_pain_2.wav" ] && cp -f "$DOG_SND/pain/dog_pain_2.wav" "$DOG_SND/drown.wav"
+            \\    # Fall sounds
+            \\    [ -f "$DOG_SND/pain/dog_pain_3.wav" ] && cp -f "$DOG_SND/pain/dog_pain_3.wav" "$DOG_SND/fall1.wav"
+            \\    [ -f "$DOG_SND/pain/dog_pain_4.wav" ] && cp -f "$DOG_SND/pain/dog_pain_4.wav" "$DOG_SND/fall2.wav"
+            \\    # Taunt - use growl
+            \\    [ -f "$DOG_SND/growl/dog_growl_1.wav" ] && cp -f "$DOG_SND/growl/dog_growl_1.wav" "$DOG_SND/taunt.wav"
+            \\    # Exert sounds - use bark
+            \\    [ -f "$DOG_SND/bark/dog_bark_2.wav" ] && cp -f "$DOG_SND/bark/dog_bark_2.wav" "$DOG_SND/exert1.wav"
+            \\    [ -f "$DOG_SND/bark/dog_bark_3.wav" ] && cp -f "$DOG_SND/bark/dog_bark_3.wav" "$DOG_SND/exert2.wav"
+            \\    [ -f "$DOG_SND/bark/dog_bark_4.wav" ] && cp -f "$DOG_SND/bark/dog_bark_4.wav" "$DOG_SND/exert3.wav"
+            \\fi
             \\
             \\echo ""
             \\echo "Creating GLSL shaders pk3..."

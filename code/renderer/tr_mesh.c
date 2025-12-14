@@ -415,7 +415,10 @@ void R_AddMD3Surfaces( trRefEntity_t *ent ) {
 			if ( shader == tr.defaultShader ) {
 				ri.Printf( PRINT_DEVELOPER, "WARNING: no shader for surface %s in skin %s\n", surface->name, skin->name );
 			} else if ( shader->defaultShader )     {
-				ri.Printf( PRINT_DEVELOPER, "WARNING: shader %s in skin %s not found\n", shader->name, skin->name );
+				// Suppress warnings for intentional void shaders (e.g., blink animations)
+				if ( !strstr( shader->name, "void" ) && !strstr( shader->name, "VOID" ) ) {
+					ri.Printf( PRINT_DEVELOPER, "WARNING: shader %s in skin %s not found\n", shader->name, skin->name );
+				}
 			}
 		} else if ( surface->numShaders <= 0 ) {
 			shader = tr.defaultShader;

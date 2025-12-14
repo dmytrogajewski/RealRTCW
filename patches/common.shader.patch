@@ -1,0 +1,12 @@
+--- a/scripts/common.shader
++++ b/scripts/common.shader
+@@ -856,7 +856,8 @@
+     {
+         map textures/sfx/portal_sfx1.tga
+         blendFunc GL_DST_COLOR GL_ZERO
+-   //     tcMod rotate 360azz    }
++   //     tcMod rotate 360
++    }
+     {
+         map textures/sfx/portal_sfx.tga
+         blendFunc GL_ONE GL_ONE

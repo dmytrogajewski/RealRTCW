@@ -1,0 +1,11 @@
+--- a/scripts/models_mapobjects_et.shader
++++ b/scripts/models_mapobjects_et.shader
+@@ -1358,7 +1358,7 @@
+ //			map $lightmap
+ //			blendFunc filter
+ //			rgbGen identity
+-//		}
++		}
+ }
+ 
+ models/mapobjects/props_sd/fuel_can
