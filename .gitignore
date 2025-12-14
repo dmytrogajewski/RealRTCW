@@ -46,3 +46,4 @@ profile
 # vscode
 .vscode/
 /.vs
+main/models/*.gguf
